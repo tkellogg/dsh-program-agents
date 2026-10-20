@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dsh.dev/schemas/standard-log-record.v1.schema.json",
+  "title": "DSH extensible standard JSONL record v1",
+  "description": "One UTF-8 JSON object per line; at most 65536 bytes, JSON depth at most 32. Runtime rejects non-finite/lossy JSON. Unknown versioned log types are accepted by this base contract.",
+  "type": "object",
+  "required": ["timestamp", "level", "log_type", "message"],
+  "properties": {
+    "timestamp": {"type": "string", "format": "date-time", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})$"},
+    "level": {"enum": ["DEBUG", "INFO", "WARNING", "ERROR"]},
+    "log_type": {"type": "string", "maxLength": 256, "pattern": "^[a-z][a-z0-9_-]*(\\.[a-z][a-z0-9_-]*)+\\.v[1-9][0-9]*$"},
+    "message": {"type": "string"},
+    "operation_id": {"type": "string"},
+    "event_id": {"type": "string"},
+    "fatal": {"type": "boolean", "description": "Advisory fatal/unhandled metadata; ERROR level determines monitoring independently."},
+    "error": {
+      "type": "object", "required": ["name", "message"], "additionalProperties": true,
+      "properties": {
+        "name": {"type": "string"}, "message": {"type": "string"}, "stack": {"type": "string"},
+        "code": {"type": ["string", "number"]}, "fingerprint": {"type": "string"}
+      }
+    },
+    "data": {}
+  },
+  "additionalProperties": true
+}

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dsh.dev/schemas/dsh.program.error-batch.v1.schema.json",
+  "title": "dsh.program.error-batch.v1 required data payload",
+  "type": "object", "required": ["key", "groups", "count", "range", "dropped"], "additionalProperties": true,
+  "properties": {
+    "key": {"type": "string"}, "count": {"type": "integer", "minimum": 1}, "dropped": {"type": "integer", "minimum": 0},
+    "range": {"type": "object", "required": ["first", "last"], "properties": {"first": {"type": "string"}, "last": {"type": "string"}}, "additionalProperties": false},
+    "groups": {
+      "type": "array", "minItems": 1, "maxItems": 20,
+      "items": {
+        "type": "object", "required": ["fingerprint", "count", "sample", "range"], "additionalProperties": true,
+        "properties": {
+          "fingerprint": {"type": "string"}, "count": {"type": "integer", "minimum": 1}, "sample": {"type": "object", "description": "Redacted representative standard record; large payloads/stacks/extensions may be omitted."},
+          "range": {"type": "object", "required": ["first", "last"], "properties": {"first": {"type": "string"}, "last": {"type": "string"}}, "additionalProperties": false},
+          "source": {
+            "type": "object", "additionalProperties": false,
+            "properties": {"path": {"type": "string"}, "offset": {"type": "integer", "minimum": 0}, "run": {"oneOf": [{"type": "string"}, {"type": "object", "required": ["id", "generation"], "properties": {"id": {"type": "string"}, "generation": {"type": "integer", "minimum": 0}}, "additionalProperties": false}]}}
+          }
+        }
+      }
+    }
+  }
+}
