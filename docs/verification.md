@@ -2,6 +2,10 @@
 
 Implementation date:2026-10-19, macOS AppleSilicon Node26.12.0, pnpm12.14.0; DSH0.2.1-rc.2/Cordis4.0.5.
 
+## Current composer-strip revision (2026-10-20)
+
+Strict build + **61/61 tests pass**, zero failed/skipped, both installed-carrier compatibility checks enabled. Includes ordinary command/watch source-edit reload, process-group cleanup, metadata/catalog persistence, real tail-able bounded log files, owner reauthorization epochs, SSE initial/coalesced/scoped/auth/abort/dispose behavior, compact DOM/no message UI, Start public-parent policy dispatch and pre-push double-click fencing. Live actual GUI pin/Start/SSE/watch checks are recorded in composer-strip.md. The initial implementation evidence below is historical where its polling/message UI differs.
+
 ## Tested scope
 
 - TypeScript strict NodeNext build emits host,SDK,runtime declarations and built bootstrap.

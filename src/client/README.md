@@ -1,84 +1,74 @@
 # DSH browser contribution
 
-This is the browser half of `@tkellogg/dsh-program-agents`, targeting DSH
-`0.2.1-rc.2`. It registers the public `conversation.input.dock` list slot, not a
-standalone page/server. DSH calls the entry's `inject(sessionId)` for the strict
-Session scope. A Session switch remounts local cards and drafts. The browser also
-filters every snapshot by its exact `ownerId` before displaying it.
+Browser half of `@tkellogg/dsh-program-agents` for DSH `0.2.1-rc.2`.
+The public `conversation.input.dock` contribution remains in the bottom composer
+seat: a tiny, collapsed-by-default **Program agents (N)** status strip, not a
+standalone page or a fixed-position overlay. Opening it shows compact rows in a
+scrollable foldout bounded by `min(240px, 35vh)`. Expansion persists across push
+updates and generation changes. Switching Session remounts the local UI.
 
 ## Integration contract
 
-`index.ts` exports `inject = ['slots', 'connection']` and `apply(ctx)`.
-The package's `dsh.client` declaration needs `platform: 'web'` and package
-injections for `@deepseek-ai/dsh-client-connection`,
-`@deepseek-ai/dsh-client-ui-conversation`, and
-`@deepseek-ai/dsh-client-ui-renderer`. The `./client` package export points to the
-built browser artifact.
+The entry exports `inject = ['slots', 'connection']` and `apply(ctx)`. Package
+client injections include Connection, conversation and renderer. Bundle for the
+browser, sharing DSH's React copy, and register via its module loader. No Node
+runtime code belongs in this bundle.
 
-Bundle the entry with esbuild `platform: 'browser', format: 'cjs'`, sharing
-`react` rather than bundling another React copy. Register the output lazily:
-
-```js
-window.__ModuleLoader__.load({
-  id: '@tkellogg/dsh-program-agents',
-  factory: require => {
-    var module = { exports: {} };
-    var exports = module.exports;
-    // CJS bundle body
-    return module.exports;
-  },
-});
-```
-
-The controller uses DSH's existing authenticated, mount-aware transport:
+`createProgramClient(ctx.connection, sessionId)` uses actual public RPC for effects:
 
 ```ts
-ctx.connection.rpc.call('/api', 'programAgents/list', { sessionId }, signal);
-ctx.connection.rpc.call('/api', 'programAgents/send', { sessionId, id, generation, body }, signal);
+ctx.connection.rpc.call('/api', 'programAgents/start', { sessionId, program }, signal);
 ctx.connection.rpc.call('/api', 'programAgents/stop', { sessionId, id, generation }, signal);
 ctx.connection.rpc.call('/api', 'programAgents/restart', { sessionId, id, generation }, signal);
 ```
 
-The host registers exact authenticated `connection.fetch.register` routes at
-`/api/programAgents/{list,send,stop,restart}`. Do not intercept `/api`:
-DSH's API Gateway already owns its sole interceptor. Connection enforces owner
-admission before our strict RPC envelope bridge validates method and correlation.
-Dedicated rpc.handle is deliberately avoided due to an rc.2 provider injection defect.
+The installed rc.2 public browser ConnectionHandle has no streaming HTTP request
+facade. Streaming therefore uses native fetch to
+`new URL('api/programAgents/events', document.baseURI)`, with `POST`,
+`credentials: 'same-origin'`, `redirect: 'error'`, JSON `{sessionId}` and an
+AbortSignal. It does not access private Connection fields or invent an API.
+A streaming fetch implementation can also be passed explicitly for tests.
 
-Connection results are `{ ok: true, value }` or
-`{ ok: false, error: { code, message, details } }`. List's value is
-`{ runs: ProgramSnapshot[] }`. Successful mutations are followed by a list read;
-the client does not depend on their value. The host must authenticate the owner
-Peer, validate the live Session, enforce exact snapshot ownership, and check the
-expected generation before mutation. Client-side filtering is defense in depth,
-not an authorization boundary.
+The authenticated host route returns `text/event-stream`. At connect and after
+coalesced changes it sends complete compact state:
 
-## MVP scope and limitations
+```text
+event: snapshot
+data: {"runs":[],"programs":[]}
 
-- Collapsed-by-default composer dock; no dedicated navigation page or start UI.
-  Programs are launched with the configured `program_start` tool.
-- One serialized read every three seconds while mounted in a visible tab, with
-  bounded exponential error backoff. Hidden tabs pause reads and revoke stale
-  controls/links. There is no event-stream subscription or execution-state replay.
-- Active programs sort ahead of terminal history, then newest start time first.
-  The UI keeps at most 50 cards, 150 recent log entries with roughly 64 KB total
-  text per card, 50 messages, and 30 resources. Individual displayed strings and
-  nested JSON rendering are also bounded. This is not a complete history viewer.
-- Stop/restart/send show pending and host errors. All requests have a 20-second
-  client deadline and mutations include a generation fence. A failed mutation
-  triggers only a state read, never an effect retry. Restart is offered only after terminal state; the runtime must additionally
-  prove process-group exit before allowing it.
-- Messages default to text. Explicit JSON mode rejects invalid JSON locally.
-  A new generation remounts its draft, so stale drafts cannot target the next run.
-- Only absolute `http://` and `https://` resources without credentials, control
-  characters, or backslashes become anchors. Anchors use `_blank`,
-  `noopener noreferrer`, and `no-referrer`. Unavailable, stale, starting, stopping,
-  or terminal-generation resources are plain disabled text. There are no iframes,
-  HTML injection, resource probes, embedded pages, or automatic resource fetches.
-- If the host plugin/API is absent, the dock displays an unavailable/error state;
-  there is no alternate launcher, custom credential handling, or replacement DSH
-  server. No running DSH installation is modified by this implementation.
+```
 
-Client tests cover the pure boundary/controller plus actual React DOM rendering
-with linkedom, mocked Connection transport, safe/disabled anchors, escaped logs,
-text/JSON send, pending/errors, Session switching, and real slot registration.
+Comments are heartbeat-only. Frames are bounded to 128 KiB (bytes), fragmented
+UTF-8/CRLF and multiline data are supported, incomplete final events are ignored.
+There are no logs or message bodies in the pushed state. The client discards
+legacy log/message/result fields rather than retaining or rendering them.
+
+Descriptors are `{ program, name, description, command: string[], urls, logsPath? }`.
+Resources are `{ id, title, type: 'ui'|'api'|'docs', url, docs?, available }`.
+Each UI item merges a descriptor with the latest owned run by opaque `program`
+key. Legacy `{runs}` lists are accepted. Counts reflect programs, not historical
+run duplication. Optional `list(signal)` is available to callers; the controller
+never calls it and has no state polling timer.
+
+## Lifecycle and UI safety
+
+- Streams reconnect with bounded exponential backoff after EOF/error; each new
+  full baseline self-heals state. Late callbacks are fenced by stream epoch.
+- Hidden tabs abort their stream and retry timer; becoming visible opens a fresh
+  stream. Disconnects retain names/status but mark stale, revoking links/actions.
+- Start is offered for configured or terminal programs; active runs offer Stop
+  and Restart. Start is single-flight, and Stop/Restart bind exact run generation.
+  Action failure never replays the effect: only the stream baseline reconnects.
+  RPC effects have a 20-second deadline. Host ownership/generation checks remain
+  authoritative; client filtering is defense in depth.
+- Rows show name, state, typed links and controls. Optional More reveals only
+  description, command, log path and local documentation paths. No Refresh,
+  message forms, recent logs, raw run IDs, generation labels or default warnings.
+- Only absolute HTTP(S) resources without credentials/controls/backslashes are
+  anchors; external links use `_blank`, `noopener noreferrer`, `no-referrer`.
+  Local documentation paths are displayed/copyable, never `file://` anchors.
+  There are no embedded resources, probes or program-resource fetches.
+
+Tests exercise the pure model/controller, actual React DOM foldout, exact RPC
+args, Session changes, single-flight/fenced effects, SSE parser bounds and abort,
+reconnect/no-poll behavior, plus an optional isolated installed-browser carrier.

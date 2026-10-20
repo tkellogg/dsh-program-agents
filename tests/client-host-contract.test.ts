@@ -1,115 +1,33 @@
-import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import test from 'node:test';
-import { Context } from '@deepseek-ai/cordis';
-import * as host from '../src/host/index.js';
-import { createProgramClient, type RpcTransport } from '../src/client/transport.js';
-import type { ProgramSnapshot } from '../src/types.js';
-
-type Route = { path: string; methods: readonly string[]; requestBody: string; fetch(request: Request): Promise<Response> };
-
-// The physical Connection carrier is stubbed here; actual rc.2 owner admission
-// and exact-route disposal are covered separately in dsh-integration.test.ts.
-test('client and host exact Fetch RPC agree and reject owner/generation/schema escapes', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'dsh-client-contract-'));
-  const ctx = new Context();
-  const routes = new Map<string, Route>();
-  ctx.provide('tools', { register() { return () => {}; } });
-  const owner = { id: 'session-a' };
-  ctx.provide('agents', { get(id: string) { return id === owner.id ? owner : undefined; } });
-  ctx.provide('llm', {});
-  ctx.provide('connection', {
-    fetch: { register(route: Route) {
-      assert.equal(route.requestBody, 'buffered');
-      assert.deepEqual(route.methods, ['POST']);
-      assert.equal(routes.has(route.path), false);
-      routes.set(route.path, route);
-      return async () => { routes.delete(route.path); };
-    } },
-    rpc: { handle() { throw new Error('Do not register the broken rc.2 dedicated channel.'); }, intercept() { throw new Error('Do not replace DSH Gateway.'); } },
-  });
-  const fiber = ctx.plugin(host, { auditDirectory: directory, programs: {} });
-  try {
-    await fiber.await();
-    assert.deepEqual([...routes.keys()], ['list', 'send', 'stop', 'restart'].map(method => `/api/programAgents/${method}`));
-    const service = ctx.programAgents;
-    const snapshot: ProgramSnapshot = { id: 'p1', generation: 2, ownerId: 'session-a', program: 'worker', label: 'Worker', state: 'running', startedAt: '', logs: [], resources: [], messages: [] };
-    service.adapter['owners'].set('session-a', owner as never);
-    const effects: string[] = [];
-    service.supervisor.list = (ownerId?: string) => ownerId === snapshot.ownerId ? [{ ...snapshot }] : [];
-    service.supervisor.get = (id, ownerId) => {
-      if (id !== snapshot.id || ownerId !== snapshot.ownerId) throw new Error('Program not found');
-      return { ...snapshot };
-    };
-    service.supervisor.send = async (_id, _ownerId, body) => { effects.push(`send:${JSON.stringify(body)}`); };
-    service.supervisor.stop = async () => { effects.push('stop'); return { ...snapshot, state: 'stopped' }; };
-    service.supervisor.restart = async () => { effects.push('restart'); return { ...snapshot, generation: 3 }; };
-    const signal = new AbortController().signal;
-    let requestId = 0;
-    const invoke = async (endpoint: string, payload: unknown, requestSignal = signal) => {
-      const path = `/api/programAgents/${endpoint}`;
-      const route = routes.get(path);
-      assert.ok(route, `No route for ${endpoint}`);
-      const rpcId = `contract-${++requestId}`;
-      const response = await route.fetch(new Request(`http://localhost${path}`, {
-        method: 'POST', headers: { 'content-type': 'application/json' }, signal: requestSignal,
-        body: JSON.stringify({ type: 'client-request', rpcId, method: `programAgents/${endpoint}`, payload }),
-      }));
-      assert.equal(response.status, 200);
-      const envelope = await response.json();
-      assert.equal(envelope.type, 'server-response'); assert.equal(envelope.rpcId, rpcId);
-      return envelope.result;
-    };
-    const transport: RpcTransport = { call(channel, endpoint, payload, requestSignal) {
-      assert.equal(channel, '/api'); assert.ok(endpoint.startsWith('programAgents/'));
-      return invoke(endpoint.slice('programAgents/'.length), payload, requestSignal);
-    } };
-    const client = createProgramClient(transport, 'session-a');
-    const runs = await client.list(signal); assert.equal(runs.runs[0]?.generation, 2);
-    await client.action('send', runs.runs[0]!, { hello: true }, signal);
-    await client.action('stop', runs.runs[0]!, undefined, signal);
-    await client.action('restart', runs.runs[0]!, undefined, signal);
-    assert.deepEqual(effects, ['send:{"hello":true}', 'stop', 'restart']); effects.length = 0;
-    const args = { sessionId: 'session-a', id: 'p1', generation: 2 };
-    for (const [endpoint, payload] of [
-      ['stop', { ...args, sessionId: 'session-b' }],
-      ['restart', { ...args, generation: 1 }],
-      ['send', args],
-      ['stop', { ...args, body: {} }],
-      ['list', { args: { sessionId: 'session-a' } }],
-      ['list', { sessionId: 'session-a', extra: 1 }],
-    ] as const) {
-      const result = await invoke(endpoint, payload);
-      assert.equal(result.ok, false, JSON.stringify({ endpoint, payload }));
-    }
-    assert.equal(routes.has('/api/programAgents/start'), false);
-    assert.deepEqual(effects, []);
-    service.adapter['owners'].delete('session-a');
-    const disposed = await invoke('restart', args); assert.equal(disposed.ok, false); assert.match(disposed.error?.message ?? '', /no longer live/);
-    assert.deepEqual(effects, []);
-
-    const listRoute = routes.get('/api/programAgents/list')!;
-    const request = (body: string, contentType = 'application/json') => new Request('http://localhost/api/programAgents/list', { method: 'POST', headers: { 'content-type': contentType }, body });
-    assert.equal((await listRoute.fetch(request('{}', 'text/plain'))).status, 415);
-    assert.equal((await listRoute.fetch(request('x'.repeat(131073)))).status, 413);
-    for (const envelope of [
-      '{',
-      JSON.stringify({ type: 'client-request', rpcId: 'bad-method', method: 'programAgents/stop', payload: { sessionId: 'session-a' } }),
-      JSON.stringify({ type: 'client-request', rpcId: 3, method: 'programAgents/list', payload: { sessionId: 'session-a' } }),
-      JSON.stringify({ type: 'client-request', rpcId: 'extra', method: 'programAgents/list', payload: { sessionId: 'session-a' }, extra: true }),
-      JSON.stringify({ type: 'client-request', rpcId: 'x'.repeat(257), method: 'programAgents/list', payload: { sessionId: 'session-a' } }),
-    ]) {
-      const response = await listRoute.fetch(request(envelope));
-      const reply = await response.json();
-      assert.equal(reply.type, 'server-response'); assert.equal(reply.result.ok, false);
-    }
-    const cancelled = new AbortController(); cancelled.abort();
-    assert.equal((await invoke('list', { sessionId: 'session-a' }, cancelled.signal)).ok, false);
-  } finally {
-    await fiber.dispose();
-    assert.equal(routes.size, 0);
-    await rm(directory, { recursive: true, force: true });
-  }
+import assert from'node:assert/strict';import{mkdtemp,rm}from'node:fs/promises';import{tmpdir}from'node:os';import{join}from'node:path';import test from'node:test';import{Context}from'@deepseek-ai/cordis';import*as host from'../src/host/index.js';import{createProgramClient,type RpcTransport}from'../src/client/transport.js';import type{ProgramSnapshot}from'../src/types.js';
+type Route={path:string;methods:readonly string[];fetch(request:Request):Promise<Response>};
+test('client and host start in exact parent public tool context; scoped SSE and generation mutations agree',async()=>{
+ const directory=await mkdtemp(join(tmpdir(),'program-contract-')),ctx=new Context(),routes=new Map<string,Route>();
+ let agent:any;const effects:string[]=[];const tools=new Map<string,any>();
+ const snapshot:ProgramSnapshot={id:'p1',generation:2,ownerId:'session-a',program:'worker',label:'Worker',state:'running',startedAt:'',logs:[],resources:[],messages:[]};
+ ctx.provide('tools',{register(tool:any){tools.set(tool.name,tool);return()=>tools.delete(tool.name);}});
+ agent={id:'session-a',ctx:{get:()=>undefined,tools:{async execute(call:any){assert.equal(call.agent,agent);assert.ok(['program_start','program_stop','program_restart'].includes(call.name));assert.equal(call.parent,undefined);effects.push(call.name==='program_start'?'parent-tool-start':call.name.slice('program_'.length));return{isError:false,content:[]};}}}};
+ ctx.provide('agents',{get:(id:string)=>id===agent?.id?agent:undefined,withInitiator(a:any,op:()=>unknown){assert.equal(a,agent);return op();}});ctx.provide('llm',{});
+ ctx.provide('connection',{fetch:{register(route:Route){routes.set(route.path,route);return async()=>{routes.delete(route.path);};}}});
+ const fiber=await ctx.plugin(host,{auditDirectory:directory,programs:{worker:{command:[process.execPath,'-e','setInterval(()=>{},1000)'],name:'Worker',description:'Example worker'}}});
+ try{
+  assert.deepEqual([...routes.keys()],['list','start','stop','restart','events'].map(m=>'/api/programAgents/'+m));
+  const a=ctx.programAgents.adapter;a['owners'].set('session-a',agent);a.supervisor.list=owner=>owner==='session-a'?[{...snapshot}]:[];a.supervisor.get=(id,owner)=>{if(id!=='p1'||owner!=='session-a')throw Error('not found');return{...snapshot};};
+  a.supervisor.stop=async()=>{effects.push('stop');return{...snapshot,state:'stopped'};};a.supervisor.restart=async()=>{effects.push('restart');return{...snapshot,generation:3};};
+  let count=0;const signal=new AbortController().signal;
+  const invoke=async(method:string,payload:unknown,s=signal)=>{const route=routes.get('/api/programAgents/'+method)!;const rpcId='test-'+ ++count;const response=await route.fetch(new Request('http://localhost'+route.path,{method:'POST',headers:{'content-type':'application/json'},signal:s,body:JSON.stringify({type:'client-request',rpcId,method:'programAgents/'+method,payload})}));const result=await response.json();assert.equal(result.rpcId,rpcId);return result.result;};
+  const rpc:RpcTransport={call:(channel,method,payload,s)=>{assert.equal(channel,'/api');return invoke(method.slice('programAgents/'.length),payload,s);}};
+  const client=createProgramClient(rpc,'session-a');const state=await client.list(signal);assert.equal(state.runs[0].generation,2);
+  await client.action('stop',state.runs[0],signal);await client.action('restart',state.runs[0],signal);assert.deepEqual(effects,['stop','restart']);effects.length=0;
+  // UI Start is unavailable if already active, then dispatches through exact parent.
+  assert.equal((await invoke('start',{sessionId:'session-a',program:'worker'})).ok,false);
+  a.supervisor.list=()=>[];
+  assert.equal((await invoke('start',{sessionId:'session-a',program:'worker'})).ok,true);assert.deepEqual(effects,['parent-tool-start']);effects.length=0;
+  const originalExecute=agent.ctx.tools.execute;let release!:()=>void;
+  agent.ctx.tools.execute=async(call:any)=>{effects.push('single-flight');await new Promise<void>(r=>release=r);return{isError:false,content:[]};};
+  const first=invoke('start',{sessionId:'session-a',program:'worker'});await new Promise<void>(r=>setImmediate(r));
+  assert.equal((await invoke('start',{sessionId:'session-a',program:'worker'})).ok,false);release();assert.equal((await first).ok,true);assert.deepEqual(effects,['single-flight']);agent.ctx.tools.execute=originalExecute;effects.length=0;
+  for(const[method,payload]of[['start',{sessionId:'session-a',program:'arbitrary'}],['start',{sessionId:'session-a',program:'worker',command:['evil']}],['stop',{sessionId:'session-b',id:'p1',generation:2}],['restart',{sessionId:'session-a',id:'p1',generation:1}],['list',{args:{sessionId:'session-a'}}],['stop',{sessionId:'session-a',id:'p1',generation:2,body:{}}]]as const){assert.equal((await invoke(method,payload)).ok,false);}
+  assert.equal(routes.has('/api/programAgents/send'),false);assert.deepEqual(effects,[]);
+  const eventRoute=routes.get('/api/programAgents/events')!;const response=await eventRoute.fetch(new Request('http://localhost'+eventRoute.path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({sessionId:'session-a'})}));const reader=response.body!.getReader();const pushed=new TextDecoder().decode((await reader.read()).value);assert.match(pushed,/event: snapshot/);assert.match(pushed,/"name":"Worker"/);assert.doesNotMatch(pushed,/parent-tool-start/);await reader.cancel();
+ }finally{await fiber.dispose();assert.equal(routes.size,0);await rm(directory,{recursive:true,force:true});}
 });

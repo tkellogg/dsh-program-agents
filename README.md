@@ -1,12 +1,49 @@
 # DSH Program Agents
 
-**Supervised TypeScript/JavaScript programs for DeepSeek Harness.** No RLM, Python, REPL, implicit model loop, execution checkpoints, or DSH core changes.
+Parent-owned TypeScript/JavaScript programs and local apps for DeepSeek Harness. **Not RLM, not a REPL, not an implicit LLM loop.**
 
-A parent agent launches a configured Node program. The program does normal work, receives messages, explicitly calls allowed model/tool/plugin capabilities, and publishes dashboard links. If it needs help, it messages its parent. The parent can inspect logs, edit the source, and explicitly restart it.
+A compact **Program agents (N)** strip lives above the parent's message composer and stays pinned with it while chat scrolls. Expand for one compact row per app: name, state, typed UI/API/docs links, Start/Stop/Restart. More reveals description, start command and log path. No Refresh button, message form or log flood. Metadata is pushed over authenticated SSE; open/closed UI state survives updates.
 
-**Experimental v0.1**, targeting DSH **0.2.1-rc.2**, Node **22.18+** on **macOS/Linux (POSIX)** (developed on26). Windows is rejected rather than claim process-group cleanup guarantees. This repo is not published to npm. Built host/browser plugin, real-process tests, and isolated Cordis/DSH integration are included. On this Mac it is now installed into the existing web profile; see `docs/local-installation.md`. The generic install procedure below applies to other profiles.
+Experimental0.2 implementation for DSH0.2.1-rc.2; Node22.18+ on macOS/Linux. Local checkout, not published. Installed in this Mac's existing GUI; see `docs/local-installation.md` and `docs/composer-strip.md`.
 
-## Quick start without DSH
+## Default workflow
+
+1. Build an app using a foreground **watch/reload** command.
+2. Register its name, description, argv command, URLs and optional log path with `program_register`.
+3. Start using `program_start` or the composer's **Start** button. The UI dispatches through the exact live parent's public tool pipeline; it does not create an unrelated shell/Agent.
+4. Edit source; let the watcher reload rather than repeatedly restarting manually. Check application readiness using its actual health/API URL and logs.
+
+```json
+{
+  "name":"Inventory",
+  "description":"Local inventory editor and stock-level API.",
+  "command":["pnpm","run","dev"],
+  "cwd":"/absolute/path/inventory",
+  "urls":[
+    {"id":"app","title":"Open inventory","type":"ui","url":"http://127.0.0.1:5173/"},
+    {"id":"api","title":"Inventory API","type":"api","url":"http://127.0.0.1:3000/api","docs":"/absolute/path/inventory/docs/api.md"},
+    {"id":"docs","title":"API docs","type":"docs","url":"/absolute/path/inventory/docs/api.md"}
+  ]
+}
+```
+
+`program_register` returns an opaque `program` key. Registration persists a parent-scoped launch description but **does not launch code**. Re-register the same name to update it. Commands are executable+argv, no implicit shell; don't pass an interpolated shell string. Model tools `program_register`, `program_start`, `program_list`, `program_stop`, `program_restart`; legacy SDK-only `program_send` is internal, not a user interface.
+
+### Shared data model
+
+- **name / description**: short display name + sentence describing purpose.
+- **command / cwd**: argv foreground launch command in its working directory. Prefer `pnpm run dev`, `tsx watch`, `node --watch`, Vite.
+- **urls**: zero or more `{id,title,type:'ui'|'api'|'docs',url,docs?}`. API URLs should include documentation, either HTTP(S) or an absolute local README/OpenAPI path. Filesystem docs are shown/copied as paths, never `file://` anchors. No credentials in URLs.
+- **logsPath**: an existing app log file/directory, or a supervisor-generated actual tail-able stdout/stderr file when omitted. Private rolling16MiB capture; old segments/disk-backpressure drops are marked. UI carries only the path, not a log feed.
+- **run state**: parent id, pid, generation, status, resources, timestamps; retained separately from durable launch descriptions. Stopped generations have no live links.
+
+## Recommended stack and installed skill
+
+**TypeScript + Hono + Zod**, Vite/React when needed; **SQLite for transactional app state**, **DuckDB for analytics/Parquet/CSV**. These are recommendations, not restrictions. Use SQLite migrations, transactions and effect idempotency. Avoid extra server/container dependencies for a small local app without a reason.
+
+Read `skills/program-agents/SKILL.md`; on this Mac it is installed at `~/.local/skills/program-agents/SKILL.md`, discovered through existing whole-directory skill links. It explains metadata, tool use, watch reload, API docs, logs, SQLite/DuckDB tradeoffs, parent escalation and cleanup.
+
+## Try without DSH
 
 ```sh
 pnpm install --frozen-lockfile
@@ -14,44 +51,11 @@ pnpm check
 pnpm example
 ```
 
-The example starts a loopback dashboard and prints its URL. Ctrl+C stops the supervisor and its process group. It demonstrates actual SDK/IPC without invoking a model or needing credentials.
+The SDK dashboard example prints a loopback URL; Ctrl+C stops it. An ordinary no-SDK TypeScript server is in `examples/watch-server.ts`; see `docs/watch-demo.md`. Native TypeScript must be erasable; compile installed examples under `node_modules` because Node intentionally refuses type-stripping there. Build ships JS examples.
 
-## A program is an ordinary entrypoint
+## Install into another DSH profile
 
-```ts
-import type { ProgramContext } from '@tkellogg/dsh-program-agents/sdk';
-
-export default async function main(ctx: ProgramContext) {
-  await ctx.status('running', 'Waiting for input');
-  for await (const {body} of ctx.inbox) {
-    if (needsHumanOrModelJudgment(body)) {
-      await ctx.status('blocked', 'Needs advice');
-      await ctx.parent.send({type: 'needs_help', item: body});
-    } else {
-      await processNormally(body);
-    }
-  }
-}
-```
-
-`ctx` provides:
-
-- `id`, `generation`, `input`, `signal`
-- `inbox`: bounded async iterable; send acceptance is **not durable processing**
-- `parent.send(json)`: explicit, rate-limited model-waking notification
-- `status('running' | 'blocked', detail?)`: does not wake the parent
-- `resources.publish({id,title,url})` / `unpublish(id)`: HTTP(S) links, generation-scoped
-- `models.call({provider,model,prompt,system?,maxTokens?,reasoningEffort?})`: one explicit text call, returns assembled blocks/usage/finish; no automatic tool execution
-- `tools.call(name,args)`: explicitly allowed native DSH tool through the owner’s public policy pipeline
-- `capabilities.list()` / `call(name,json)`: plugin-extensible JSON operations
-
-Normal npm libraries handle databases, HTTP, scheduling, retries and application logic. JS entrypoints work directly; TS entrypoints must use Node-supported erasable TypeScript or be compiled first. No tsconfig path aliases or arbitrary transpilation in the child.
-
-See `examples/dashboard.ts` for source and built `dist/examples/dashboard.js` for a working link-publishing program. Use the built JS when installed under `node_modules` (Node intentionally refuses native TS stripping there).
-
-## Install into another DSH profile (never automatic)
-
-Build first and use an **absolute host entrypoint** in your profile patch. Review existing profile patches before merging; DSH config patch semantics replace complete config values.
+Build first. New profile entries need an **insert wrapper**, not a bare id-targeted override:
 
 ```yaml
 - insert:
@@ -60,79 +64,51 @@ Build first and use an **absolute host entrypoint** in your profile patch. Revie
       config:
         programs:
           dashboard:
+            name: Dashboard
+            description: Small SDK dashboard example
             entry: /absolute/path/dsh-program-agents/dist/examples/dashboard.js
             allowedCapabilities: []
         maxRuns: 8
         maxHistory: 64
 ```
 
-The installed DSH profile must provide `tools`, `agents`, and `llm` (standard web/headless profiles do). The web composition additionally provides `connection` and discovers the package's `dsh.client` browser contribution. It mounts a **Program agents** dock above the conversation composer. The plugin uses four exact authenticated Connection Fetch routes at `/api/programAgents/{list,send,stop,restart}`—never replaces DSH's `/api` Gateway interceptor, never starts a second web server. A new profile entry must use the `insert` wrapper shown above; a bare id-targeted patch cannot create it. Model-facing tools: `program_start`, `program_list`, `program_send`, `program_stop`, `program_restart`. All actions address the caller’s own programs; mutations include the expected generation.
+Ordinary configured programs can use `command: [pnpm, run, dev]` instead of `entry`; exactly one is required. Host services tools/agents/llm are provided by standard profiles. Browser contribution is discovered from nearest package manifest and `./client`. DSH0.2.1-rc.2 has a dedicated-channel injection defect, so UI uses exact owner-authenticated Connection Fetch routes `/api/programAgents/{list,start,stop,restart,events}`, preserving Gateway's sole interceptor. No new GUI server or credential system. Rebuild and refresh the existing GUI after client edits; no source watcher is implied. See `docs/installation.md` for cache/update caveats.
 
-A simple prompt:
+## Optional SDK and broker capabilities
 
-> Start the configured dashboard program. Inspect its link, send it a JSON hello message, and leave it running. Do not restart it automatically if it fails.
-
-For a checked-out local package, dependency resolution must see the host's same DSH peer versions. `pnpm install` here includes development peers for isolated tests. Do not install a separate newer DSH over a running one. See `docs/installation.md` for integration details and lifecycle behavior.
-
-## Grant capabilities explicitly
-
-```yaml
-programs:
-  worker:
-    entry: /absolute/path/worker.mjs
-    allowedCapabilities: [models.call, tools.call, inventory.lookup]
-    models:
-      - {provider: local-mlx, model: Qwen3.8-27B-4bit}
-    maxModelOutputTokens: 4096
-    tools: [working_directory]
-```
-
-Both the named capability and its resource-specific grant are required. Programs cannot select arbitrary model routes/tools, request raw API keys, or provide a launch command through the start tool. Program definitions/environment are trusted host configuration. Tool calls use the exact live supervising Agent with a fresh execution id, never a captured launch-tool token. PTC-only tools fail closed rather than forging a transport token. Nested tool results are audited separately, not injected as fake LLM tool calls into the parent’s conversation.
-
-A host plugin can extend the SDK without adding methods:
+Ordinary commands require **no SDK**, have no IPC inbox/model keys, and can serve their own APIs. For explicit DSH models/tools, dynamic URLs/status and exceptional parent coordination, export a default SDK entry:
 
 ```ts
-ctx.programAgents.capabilities.register({
-  name: 'inventory.lookup',
-  description: 'Find an inventory item',
-  inputSchema: {type: 'object'}, // descriptive metadata; handler must validate input
-  async handler(input, {run, signal}) {
-    // Validate input and apply application-specific authority using run.ownerId.
-    return lookupItem(input, signal);
-  },
-});
+import type { ProgramContext } from '@tkellogg/dsh-program-agents/sdk';
+export default async function main(ctx: ProgramContext) {
+  await ctx.resources.publish({id:'app',title:'Inventory',type:'ui',url:'http://127.0.0.1:3000/'});
+  await ctx.status('running','Ready');
+  // Normal work; ctx.parent.send(json) automatically wakes/steers parent if needed.
+}
 ```
 
-Capability metadata is discoverable only when granted to that program. Handlers must honor cancellation, validate input and return JSON. The host bounds concurrent outstanding handlers even when an extension ignores cancellation. Effects are **never automatically retried**.
+`ctx.parent.send` remains a bounded internal coordination primitive. Parent processes it automatically; user need not relay/acknowledge messages. Status/log updates don't wake the LLM; normal stop/completion does not inject a chat notice. Failure may add passive context for the parent's next step.
 
-## Supervision, not magical durability
+Named `allowedCapabilities`, exact `models:[{provider,model}]` and `tools:[name]` grants are trusted host config. Dynamic command registration does not grant subscriptions/tools. `models.call` is one bounded assembled text call (not token streaming/tool loop); `tools.call` traverses the live parent's public policy with fresh identity, no expired tool token. Third-party host plugins can register JSON handlers via `ctx.programAgents.capabilities.register(...)`; validate inputs, honor cancellation, return JSON. No automatic effect retries.
 
-- Separate Node processes/process groups; a blocked program event loop can be killed externally.
-- Start returns after SDK connection, not after main finishes. Import/connection is deadline-bounded.
-- Stop requests cancellation then escalates to forced termination. Restart waits for proven old-group exit before creating a new generation. Unproven cleanup is an error.
-- Live links are revoked on stop/crash/restart; the UI marks stale/unavailable links inert and never embeds/fetches their pages.
-- Parent disposal/plugin unload revoke runs; normal parent turn completion does not stop them.
-- All state, messages, resource registry and handles are process-live. Host restart does **not** resurrect programs.
-- A small bounded private journal records lifecycle, explicit model inputs/results and tool effect boundaries outside DSH Session formats. It is not a replay/checkpoint engine. By default: `$DSH_HOME/program-agents/audit` or `~/.dsh/program-agents/audit`; configure `auditDirectory` for isolation. Contains task data; permissions0700/0600. Archive explicitly when journal limits fill.
-- Database/queue checkpoints and idempotency belong to the program. After cancellation or process loss a dispatched effect may have **unknown outcome**. Verify external state before retrying side effects.
+## Lifecycle, privacy and limits
 
-## Security and limits
+**Trusted local code only. A Node child/process group is not an OS sandbox.** Ordinary code can access filesystem/network under your account; allowlists gate only the DSH broker. Minimal child env omits secrets/NODE_OPTIONS; command mode inherits HOME for package caches. No arbitrary command from browser: it can only select this parent's registered definition. UI mutations traverse parent tool policy.
 
-**A Node child process is not a security sandbox.** Programs are trusted local code with the launching OS user's filesystem/network/process authority. Capability allowlists fence the provided DSH bridge, not arbitrary direct Node API use. Never launch untrusted downloaded code without an actual OS isolation policy. No secrets are copied wholesale into child environments, but trusted code running as your account may still read local files. The model can edit the program's source if its own permissions allow it; review/test before explicit restart.
+Start returns after spawn/SDK connection, not app readiness. Stop requests cooperative shutdown then forced process-group cleanup; restart requires proven old-group exit. Watchers may reload their own workers; the supervisor does not auto-retry a failed watcher/effect. Parent turn completion keeps runs; parent disposal/plugin unload revokes/stops them. Replacement live Agent for same Session can explicitly reauthorize after cleanup; old restarting epochs remain fenced.
 
-IPC frames64KiB, logs bounded128KiB/200entries, inbox64pending messages, messages100, resources32. Capability responses should stay below57KiB; large results fail rather than silently truncating. Model calls are unary-assembled in v0.1; streaming tokens to the child and child-LLM subagent spawning are deliberately deferred. Default deadlines can be configured for slower local models. Parent notification10/minute; status/log changes do not repeatedly wake models.
+Launch metadata/catalog and private supervisory audit persist locally, **execution state does not**. App databases/queues/checkpoints/idempotency belong to the program. Interrupted effects can have unknown outcome; verify before retry. No exactly-once promise, replay, auto-restore, Python, native subagent-tree membership or program-spawned LLM agent API.
 
-UI polls every3s while mounted/visible (errorbackoff, abortable20srequests), shows bounded history, and has message/stop/restart controls. It does not launch arbitrary code or start programs from URLs. Links open in a new tab with `noopener noreferrer`; no iframe/proxy/HTML under DSH origin. For remote DSH, a loopback URL points at the browser's machine—use explicit secure forwarding yourself; no automatic forwarding is claimed.
+SSE sends initial compact snapshot + coalesced changes, suppresses identical updates,15s heartbeat; reconnect only on transport loss, no list polling.64streams/128KiBframe; slow clients close/reconnect to a fresh snapshot. Hidden tabs abort and reconnect on visibility. Stale links/actions are disabled. Internal runtime IPC64KiB,32pending/globalnoncooperative calls,64inbox/sends, bounded log/message/history rings. UI shows at most50 programs, foldout min(240px,35vh). URLs are not fetched, embedded or proxied; remote-host localhost needs explicit forwarding.
 
-## Development
+Defaults: `~/.dsh/program-agents/{audit,catalog}` (custom auditDirectory groups catalog/logs there unless overridden). Private0700/0600. Audit contains exact explicit model/tool data and has bounded file budget; archive intentionally. Capture logs are bounded per generation, not aggregate automatic retention—archive/remove old stopped-run logs under your own policy. Secrets should not appear in commands/URLs/launch metadata.
+
+## Verification
 
 ```sh
-pnpm check                         # build host + lazy-CJS browser, all tests
-pnpm exec tsx --test tests/runtime*.test.ts
-pnpm exec tsx --test tests/client*.test.ts
-pnpm exec tsx --test tests/dsh-integration.test.ts
+pnpm check
+DSH_TEST_CONNECTION_ENTRY=/path/to/dsh-client-connection/lib/index.js \
+DSH_CLIENT_CONNECTION_BUNDLE=/path/to/dsh-client-connection/lib/client.browser.js pnpm test
 ```
 
-Build output in `dist/`; package exports host, `./sdk`, `./runtime`, `./client`. The browser bundle is DSH's lazy module format, not standalone ESM. Tests require no subscription authentication or running DSH/oMLX server. No model weights/runtime settings are changed.
-
-See `DESIGN.md`, `docs/installation.md` and `docs/verification.md`. MIT licensed.
+Actual process/group/watch/log tests, SSE/auth/owner/tool-policy tests, DOM/layout behavior and installed-carrier compatibility; no model inference required. See verification and local-installation docs. MIT licensed.

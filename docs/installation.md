@@ -1,5 +1,7 @@
 # Installation and integration
 
+Current UI/runtime: see `composer-strip.md` for program_register, command/watch processes, pushed updates and installed v5 entry. The host now mounts exact routes list/start/stop/restart/events; user messaging is removed (legacy SDK parent input remains an internal tool only). Launch descriptions persist separately from execution state.
+
 ## Status
 
 Local experimental source package, not published. Targets DSH0.2.1-rc.2, Cordis4.0.5. Node22.18+ with erasable TS or precompiled JS. Build with pnpm (lockfile committed). No automatic mutation of a user's profiles, credentials, model settings or running server.

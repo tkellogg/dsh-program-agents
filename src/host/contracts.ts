@@ -10,6 +10,8 @@ export interface ProgramGrant extends ProgramDefinition {
 export interface PluginConfig {
   /** Plugin-owned bounded journals; does not alter DSH Session event schemas. */
   auditDirectory?: string;
+  catalogDirectory?: string;
+  logDirectory?: string;
   programs?: Record<string, ProgramGrant>;
   maxRuns?: number;
   maxHistory?: number;

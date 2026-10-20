@@ -22,7 +22,7 @@ export function apply(ctx: ClientContext): void {
     name: 'conversation.input.dock',
     id: 'program-agents',
     order: 30,
-    inject: (sessionId) => ({ programClient: createProgramClient(ctx.connection.rpc, sessionId) }),
+    inject: (sessionId) => ({ programClient: createProgramClient(ctx.connection, sessionId) }),
   }, ProgramAgentsDock));
 }
 export { ProgramAgentsDock, ProgramAgentsPanel } from './view.js';

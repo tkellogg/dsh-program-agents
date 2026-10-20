@@ -4,11 +4,28 @@ export type JsonValue = null | boolean | number | string | JsonValue[] | { [key:
 export type ProgramState = 'starting' | 'running' | 'blocked' | 'stopping' | 'stopped' | 'completed' | 'failed';
 
 export interface ProgramDefinition {
-  entry: string;
+  /** SDK module entrypoint. Mutually exclusive with command. */
+  entry?: string;
+  /** Trusted executable argv, passed directly to spawn without an implicit shell. */
+  command?: string[];
+  name?: string;
+  description?: string;
+  urls?: Array<{ id: string; title: string; type: 'ui' | 'api' | 'docs'; url: string; docs?: string }>;
+  /** Optional descriptor for program-owned logs; supervisor capture remains separate. */
+  logsPath?: string;
   cwd?: string;
   args?: string[];
   env?: Record<string, string>;
   allowedCapabilities?: string[];
+}
+
+export interface ProgramDescriptor {
+  program: string;
+  name: string;
+  description: string;
+  command: string[];
+  urls: ProgramResource[];
+  logsPath?: string;
 }
 
 export interface ProgramLog {
@@ -21,6 +38,9 @@ export interface ProgramResource {
   id: string;
   title: string;
   url: string;
+  type?: 'ui' | 'api' | 'docs';
+  /** Documentation HTTP(S) URL or informational absolute filesystem path. */
+  docs?: string;
   available: boolean;
 }
 
@@ -37,6 +57,10 @@ export interface ProgramSnapshot {
   program: string;
   ownerId: string;
   label: string;
+  name?: string;
+  description?: string;
+  command?: string[];
+  logsPath?: string;
   state: ProgramState;
   status?: string;
   pid?: number;
@@ -73,7 +97,7 @@ export interface ProgramContext {
   readonly parent: { send(body: JsonValue): Promise<void> };
   status(state: 'running' | 'blocked', detail?: string): Promise<void>;
   readonly resources: {
-    publish(resource: { id: string; title: string; url: string }): Promise<void>;
+    publish(resource: { id: string; title: string; url: string; type?: 'ui' | 'api' | 'docs'; docs?: string }): Promise<void>;
     unpublish(id: string): Promise<void>;
   };
   readonly capabilities: {
@@ -109,4 +133,8 @@ export interface ProgramSupervisorOptions {
   startupTimeoutMs?: number;
   stopTimeoutMs?: number;
   callTimeoutMs?: number;
+  /** Private capture directory; standalone supervisors default to a private temporary directory. */
+  logDirectory?: string;
+  /** Trusted host override for bundled deployments; defaults to this runtime's directory. */
+  bootstrapDirectory?: string;
 }

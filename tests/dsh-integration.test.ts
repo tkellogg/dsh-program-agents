@@ -33,7 +33,7 @@ test('real Cordis + DSH ToolRuntime enforce policy and exact routes do not repla
   const fork = await root.plugin(plugin, { auditDirectory: directory, programs: { example: { entry: resolve('examples/dashboard.ts'), tools: ['fixture_read'], allowedCapabilities: ['tools.call'] } } });
   try {
     assert.ok(fork); assert.ok(root.programAgents);
-    assert.deepEqual([...routes.keys()], ['list', 'send', 'stop', 'restart'].map(method => `/api/programAgents/${method}`));
+    assert.deepEqual([...routes.keys()], ['list', 'start', 'stop', 'restart', 'events'].map(method => `/api/programAgents/${method}`));
     root.tools.register(defineTool({ name: 'fixture_read', description: 'read fixture', parameters: {}, output: { schema: { type: 'string' }, render: (_a, v) => [{ type: 'text', text: v }] }, execute: async () => { calls++; return 'ok'; } }));
     const adapter = root.programAgents.adapter; adapter['owners'].set('owner', owner);
     const run: ProgramSnapshot = { id: 'fixture', generation: 1, program: 'example', ownerId: 'owner', label: 'test', state: 'running', startedAt: new Date().toISOString(), logs: [], resources: [], messages: [] };
@@ -80,12 +80,16 @@ test('installed Connection exact routes gate owners, preserve Gateway and dispos
     assert.equal(forbidden.status, 403); assert.equal(dispatched, 0, 'Non-owner must be rejected before plugin callback');
     const admitted = await shared.fetch(rpcRequest('list', { sessionId: 'owner' }), owner);
     assert.equal(admitted.status, 200);
-    assert.deepEqual(await admitted.json(), { type: 'server-response', rpcId: 'integration-check', result: { ok: true, value: { runs: [] } } });
+    assert.deepEqual(await admitted.json(), { type: 'server-response', rpcId: 'integration-check', result: { ok: true, value: { runs: [], programs: [] } } });
     assert.equal(dispatched, 1);
+    const eventRequest=()=>new Request('http://localhost/api/programAgents/events',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({sessionId:'owner'})});
+    assert.equal((await shared.fetch(eventRequest(),agent)).status,403);
+    const pushed=await shared.fetch(eventRequest(),owner);assert.equal(pushed.headers.get('content-type'),'text/event-stream; charset=utf-8');const reader=pushed.body.getReader();assert.match(new TextDecoder().decode((await reader.read()).value),/event: snapshot/);await reader.cancel();
+    assert.equal(dispatched,2);
     const mismatch = await shared.fetch(rpcRequest('list', { sessionId: 'owner' }, { method: 'programAgents/stop' }), owner);
-    assert.equal((await mismatch.json()).result.ok, false); assert.equal(dispatched, 1);
+    assert.equal((await mismatch.json()).result.ok, false); assert.equal(dispatched, 2);
     const malformed = await shared.fetch(rpcRequest('list', { sessionId: 'owner', extra: true }), owner);
-    assert.equal((await malformed.json()).result.ok, false); assert.equal(dispatched, 1);
+    assert.equal((await malformed.json()).result.ok, false); assert.equal(dispatched, 2);
 
     let gatewayCalls = 0;
     const removeGateway = root.get('connection').rpc.intercept('/api', (endpoint: string) => endpoint === 'fixtureGateway/list', async () => { gatewayCalls++; return { ok: true, value: 'gateway-preserved' }; });
@@ -94,7 +98,7 @@ test('installed Connection exact routes gate owners, preserve Gateway and dispos
     assert.equal(gatewayCalls, 1);
     await fork.dispose();
     assert.equal((await shared.fetch(rpcRequest('list', { sessionId: 'owner' }), owner)).status, 404);
-    assert.equal(dispatched, 1);
+    assert.equal(dispatched, 2);
     assert.equal((await (await shared.fetch(gatewayRequest(), owner)).json()).result.value, 'gateway-preserved');
     assert.equal(gatewayCalls, 2); await removeGateway();
   } finally {

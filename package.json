@@ -14,7 +14,7 @@
     "./client": "./dist/client.js",
     "./package.json": "./package.json"
   },
-  "files": ["dist", "examples", "README.md", "LICENSE", "docs"],
+  "files": ["dist", "examples", "README.md", "LICENSE", "docs", "skills"],
   "scripts": {
     "build": "tsc -p tsconfig.json && node scripts/build-client.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",

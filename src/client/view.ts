@@ -1,116 +1,93 @@
-import { createElement as h, useEffect, useMemo, useState, useSyncExternalStore, type CSSProperties, type FormEvent } from 'react';
+import { createElement as h, useEffect, useMemo, useState, useSyncExternalStore, type CSSProperties } from 'react';
 import { actionKey, createPanelController, type PanelController, type ProgramPanelState } from './controller.js';
-import { CLIENT_LIMITS, formatJson, parseMessage, resourceLink, runControls, type ProgramAction, type ProgramRun } from './model.js';
+import { resourceLink, runControls, safeResourceUrl, type ProgramAction, type ProgramItem } from './model.js';
 import type { ProgramClient } from './transport.js';
 
+// The conversation.input.dock lives inside DSH's bottom-anchored composer seat.
+// Stay in that layout flow: no global selectors, fixed positioning or overlay.
 const panelStyle: CSSProperties = {
   boxSizing: 'border-box', width: '100%', maxWidth: 'var(--dsh-composer-card-max-width, 960px)',
-  margin: '0 auto 8px', border: '1px solid var(--dsw-alias-border-l1, #8885)', borderRadius: 10,
-  background: 'var(--dsw-specific-menu, Canvas)', color: 'var(--dsw-alias-label-primary, CanvasText)', fontSize: 13,
+  margin: '0 auto 4px', border: '1px solid var(--dsw-alias-border-l1, #8884)', borderRadius: 8,
+  background: 'var(--dsw-specific-menu, Canvas)', color: 'var(--dsw-alias-label-primary, CanvasText)', fontSize: 12,
 };
-const rowStyle: CSSProperties = { display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' };
-const buttonStyle: CSSProperties = { font: 'inherit', color: 'inherit', background: 'transparent', border: '1px solid var(--dsw-alias-border-l1, #8888)', borderRadius: 6, padding: '4px 9px', cursor: 'pointer' };
-const preStyle: CSSProperties = { margin: '6px 0', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', fontSize: 12, maxHeight: 180, overflow: 'auto', borderRadius: 4, background: 'var(--dsw-alias-interactive-bg-hover, #8881)', padding: 8 };
-const errorStyle: CSSProperties = { color: 'var(--dsw-alias-state-error-primary, #bc3333)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', margin: '6px 0' };
+const rowStyle: CSSProperties = { display: 'flex', gap: 8, alignItems: 'center', minWidth: 0 };
+const buttonStyle: CSSProperties = { font: 'inherit', color: 'inherit', background: 'transparent', border: '1px solid var(--dsw-alias-border-l1, #8885)', borderRadius: 5, padding: '2px 6px', cursor: 'pointer', whiteSpace: 'nowrap' };
+const mutedStyle: CSSProperties = { opacity: 0.65, fontSize: 11 };
+const linkStyle: CSSProperties = { color: 'var(--dsw-alias-link-primary, LinkText)', whiteSpace: 'nowrap' };
+const errorStyle: CSSProperties = { color: 'var(--dsw-alias-state-error-primary, #bc3333)', fontSize: 11, margin: '3px 0 0', overflowWrap: 'anywhere' };
 function button(label: string, disabled: boolean, onClick: () => void, extra: Record<string, unknown> = {}) {
   return h('button', { type: 'button', style: { ...buttonStyle, opacity: disabled ? 0.5 : 1 }, disabled, onClick, ...extra }, label);
 }
-function RunCard({ run, state, controller }: { run: ProgramRun; state: ProgramPanelState; controller: PanelController }) {
-  const key = actionKey(run);
-  const pending = state.pending[key];
-  const controls = runControls(run.state, Boolean(pending), state.stale);
-  const [draft, setDraft] = useState('');
-  const [jsonMode, setJsonMode] = useState(false);
-  const [validation, setValidation] = useState('');
-  const send = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!controls.send) return;
-    let body: unknown;
-    try { body = parseMessage(draft, jsonMode); setValidation(''); }
-    catch (error) { setValidation(error instanceof Error ? error.message : 'Invalid message.'); return; }
-    void controller.action('send', run, body).then(sent => { if (sent) setDraft(previous => previous === draft ? '' : previous); });
+function ProgramRow({ item, state, controller }: { item: ProgramItem; state: ProgramPanelState; controller: PanelController }) {
+  const key = actionKey(item), pending = state.pending[key];
+  const status = item.run?.state ?? 'configured';
+  const controls = runControls(status, Boolean(pending), state.stale);
+  const [more, setMore] = useState(false);
+  const [copied, setCopied] = useState('');
+  const localDocs = [...new Set(item.urls.flatMap(resource => [
+    ...(resource.docs && !safeResourceUrl(resource.docs) ? [resource.docs] : []),
+    ...(resource.type === 'docs' && /^(?:\/|[A-Za-z]:[\\/])/.test(resource.url) && !safeResourceUrl(resource.url) ? [resource.url] : []),
+  ]))];
+  const hasMore = Boolean(item.description || item.command.length || item.logsPath || localDocs.length);
+  const perform = (action: ProgramAction) => { void controller.action(action, item); };
+  const copy = (text: string) => {
+    if (typeof navigator.clipboard?.writeText === 'function') void navigator.clipboard.writeText(text).then(() => setCopied(text), () => {});
   };
-  const perform = (action: ProgramAction) => { void controller.action(action, run); };
-  return h('article', { 'data-program-id': run.id, 'data-generation': run.generation, style: { padding: 12, borderTop: '1px solid var(--dsw-alias-border-l1, #8885)', overflowWrap: 'anywhere' } },
+  return h('article', { 'data-program-key': item.program, style: { padding: '6px 9px', borderTop: '1px solid var(--dsw-alias-border-l1, #8883)' } },
     h('div', { style: rowStyle },
-      h('strong', { style: { flex: '1 1 180px' } }, run.label || run.program || 'Program'),
-      h('span', { 'data-program-state': run.state, style: { fontWeight: 600 } }, run.state),
-      h('span', { style: { opacity: 0.7 } }, `generation ${run.generation}`),
+      h('strong', { title: item.name, style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: '1 1 100px' } }, item.name),
+      h('span', { 'data-program-state': status, title: item.run?.status, style: mutedStyle }, status),
+      h('span', { 'aria-label': 'Program resources', style: { ...rowStyle, gap: 6, flexWrap: 'wrap' } }, ...item.urls.flatMap((resource, index) => {
+        const href = resourceLink(item, resource, state.stale, pending);
+        const label = resource.type.toUpperCase();
+        const docsHref = resource.docs && safeResourceUrl(resource.docs);
+        return [href
+          ? h('a', { key: `${index}:url`, href, target: '_blank', rel: 'noopener noreferrer', referrerPolicy: 'no-referrer', title: resource.title, style: linkStyle }, label)
+          : h('span', { key: `${index}:url`, 'aria-disabled': true, title: resource.title, style: mutedStyle }, label),
+          ...(docsHref && resource.type !== 'docs' ? [href
+            ? h('a', { key: `${index}:docs`, href: docsHref, target: '_blank', rel: 'noopener noreferrer', referrerPolicy: 'no-referrer', style: linkStyle }, 'Docs')
+            : h('span', { key: `${index}:docs`, 'aria-disabled': true, style: mutedStyle }, 'Docs')] : []),
+        ];
+      })),
+      (status === 'configured' || ['stopped', 'completed', 'failed'].includes(status)) ? button(pending === 'start' ? 'Starting…' : 'Start', !controls.start, () => perform('start')) : null,
+      status !== 'configured' && !['stopped', 'completed', 'failed'].includes(status) ? button(pending === 'stop' ? 'Stopping…' : 'Stop', !controls.stop, () => perform('stop')) : null,
+      status !== 'configured' ? button(pending === 'restart' ? 'Restarting…' : 'Restart', !controls.restart, () => perform('restart')) : null,
+      hasMore ? button('More', false, () => setMore(!more), { 'aria-expanded': more, 'aria-label': `More about ${item.name}`, style: { ...buttonStyle, border: 0, padding: '2px 0', ...mutedStyle } }) : null,
     ),
-    h('div', { style: { fontSize: 11, opacity: 0.7, marginTop: 4 } }, `${run.program} · ${run.id}`),
-    run.status ? h('p', { style: { margin: '6px 0', whiteSpace: 'pre-wrap' } }, run.status) : null,
-    run.error ? h('p', { style: errorStyle }, run.error) : null,
-    run.endedAt ? h('div', { style: { fontSize: 11, opacity: 0.7, margin: '4px 0' } }, `Ended ${run.endedAt}`) : null,
-    h('div', { style: rowStyle },
-      button(pending === 'stop' ? 'Stopping…' : 'Stop', !controls.stop, () => perform('stop')),
-      button(pending === 'restart' ? 'Restarting…' : 'Restart', !controls.restart, () => perform('restart'), { title: 'Explicitly start a new generation after the previous process exits.' }),
-      pending ? h('span', { role: 'status' }, pending === 'send' ? 'Sending…' : 'Action pending…') : null,
-    ),
-    state.actionErrors[key] ? h('p', { role: 'alert', style: errorStyle }, state.actionErrors[key]) : null,
-    run.resources.length ? h('ul', { 'aria-label': 'Program resources', style: { paddingLeft: 20, margin: '8px 0' } },
-      ...run.resources.map((resource, index) => {
-        const href = resourceLink(run, resource, state.stale, pending);
-        const title = resource.title || resource.id || 'Resource';
-        return h('li', { key: `${resource.id}:${index}` }, href
-          ? h('a', { href, target: '_blank', rel: 'noopener noreferrer', referrerPolicy: 'no-referrer', style: { color: 'var(--dsw-alias-link-primary, LinkText)' } }, `${title} ↗`)
-          : h('span', { 'aria-disabled': true, style: { opacity: 0.6 }, title: 'Resource unavailable, stale, stopped, or not an absolute HTTP(S) URL.' }, `${title} — unavailable`));
-      }),
+    (state.actionErrors[key] || item.run?.error) ? h('p', { role: 'alert', style: errorStyle }, state.actionErrors[key] || item.run?.error) : null,
+    more ? h('div', { 'aria-label': `${item.name} details`, style: { ...mutedStyle, marginTop: 5, overflowWrap: 'anywhere' } },
+      item.description ? h('div', null, item.description) : null,
+      item.command.length ? h('div', null, h('code', null, item.command.join(' '))) : null,
+      item.logsPath ? h('div', null, 'Logs: ', h('code', null, item.logsPath)) : null,
+      ...localDocs.map((path, index) => h('div', { key: index }, 'Docs: ', h('code', null, path), ' ', button(copied === path ? 'Copied' : 'Copy', false, () => copy(path)))),
     ) : null,
-    run.logs.length ? h('details', null,
-      h('summary', { style: { cursor: 'pointer', marginTop: 8 } }, `Recent logs (${run.logs.length}; bounded)`),
-      h('pre', { style: preStyle, 'aria-label': 'Recent program logs' }, ...run.logs.map((log, index) => h('span', { key: `${log.sequence}:${index}`, style: { display: 'block' } }, `[${log.stream}] ${log.text}`))),
-    ) : null,
-    run.messages.length ? h('details', null,
-      h('summary', { style: { cursor: 'pointer', marginTop: 8 } }, `Recent messages (${run.messages.length}; bounded)`),
-      ...run.messages.map((message, index) => h('div', { key: index },
-        h('div', { style: { marginTop: 6, fontSize: 11, opacity: 0.7 } }, `${message.direction === 'program' ? 'Program → parent' : 'Parent → program'} · ${message.at}`),
-        h('pre', { style: preStyle }, formatJson(message.body)),
-      )),
-    ) : null,
-    run.result !== undefined ? h('details', null, h('summary', { style: { cursor: 'pointer', marginTop: 8 } }, 'Result'), h('pre', { style: preStyle }, formatJson(run.result))) : null,
-    h('form', { onSubmit: send, style: { marginTop: 10 } },
-      h('label', { style: { display: 'block' } }, 'Message to program',
-        h('textarea', { 'aria-label': 'Message to program', rows: 2, value: draft, maxLength: CLIENT_LIMITS.inputCharacters, disabled: !controls.send,
-          onChange: (event: { currentTarget: HTMLTextAreaElement }) => setDraft(event.currentTarget.value),
-          placeholder: controls.send ? 'Send text to this program’s inbox' : 'Messages require a running or blocked program',
-          style: { display: 'block', boxSizing: 'border-box', marginTop: 4, width: '100%', font: 'inherit', color: 'inherit', background: 'transparent', border: '1px solid var(--dsw-alias-border-l1, #8888)', borderRadius: 6, padding: 6, resize: 'vertical', maxHeight: 160 },
-        }),
-      ),
-      h('div', { style: { ...rowStyle, marginTop: 6 } },
-        h('label', null, h('input', { type: 'checkbox', checked: jsonMode, disabled: !controls.send, onChange: (event: { currentTarget: HTMLInputElement }) => setJsonMode(event.currentTarget.checked) }), ' JSON body'),
-        h('button', { type: 'submit', style: buttonStyle, disabled: !controls.send || !draft.trim() }, pending === 'send' ? 'Sending…' : 'Send'),
-      ),
-      validation ? h('p', { role: 'alert', style: errorStyle }, validation) : null,
-    ),
   );
 }
-/** Public component is injectable for DOM tests; the actual entry mounts it in a strict Session slot. */
-export function ProgramAgentsPanel({ client, pollIntervalMs = 3_000 }: { client: ProgramClient; pollIntervalMs?: number }) {
-  const controller = useMemo(() => createPanelController(client, pollIntervalMs), [client, pollIntervalMs]);
+/** Tiny status strip in the existing Session composer slot. Foldout state is
+ * independent of snapshots, and rows are keyed by definition, never generation. */
+export function ProgramAgentsPanel({ client, reconnectDelayMs }: { client: ProgramClient; reconnectDelayMs?: number }) {
+  const controller = useMemo(() => createPanelController(client, reconnectDelayMs), [client, reconnectDelayMs]);
   const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
   useEffect(() => {
-    const changed = () => controller.setVisible(typeof document === 'undefined' || document.visibilityState !== 'hidden');
+    const changed = () => controller.setVisible(document.visibilityState !== 'hidden');
     changed(); controller.start();
     document.addEventListener('visibilitychange', changed);
     return () => { document.removeEventListener('visibilitychange', changed); controller.stop(); };
   }, [controller]);
   const [open, setOpen] = useState(false);
   return h('section', { 'aria-label': 'Program agents', 'data-session-id': client.sessionId, style: panelStyle },
-    h('div', { style: { ...rowStyle, padding: '7px 10px' } },
-      button(`${open ? '▾' : '▸'} Program agents${state.runs.length ? ` (${state.runs.length})` : ''}`, false, () => setOpen(!open), { 'aria-expanded': open, style: { ...buttonStyle, border: 0, flex: 1, textAlign: 'left' } }),
-      h('span', { role: 'status', style: { fontSize: 11, opacity: 0.75 } }, state.error ? 'Unavailable' : state.loading ? 'Refreshing…' : 'Session scoped'),
-      button('Refresh', state.loading, () => { void controller.refresh(); }),
+    h('div', { style: { ...rowStyle, padding: '3px 8px' } },
+      button(`${open ? '▾' : '▸'} Program agents (${state.items.length})`, false, () => setOpen(!open), { 'aria-expanded': open, style: { ...buttonStyle, border: 0, flex: 1, textAlign: 'left', padding: '2px 0' } }),
+      state.stale ? h('span', { role: 'status', title: state.error, style: mutedStyle }, state.error ? 'Reconnecting…' : state.loading ? 'Connecting…' : 'Paused') : null,
     ),
-    open ? h('div', { style: { maxHeight: 460, overflow: 'auto' } },
-      h('p', { style: { margin: '0 12px 8px', fontSize: 11, opacity: 0.7 } }, 'Supervised trusted programs, not a sandbox. Links open externally; this panel never embeds or fetches program resources.'),
-      state.error ? h('p', { role: 'alert', style: { ...errorStyle, margin: '8px 12px' } }, `Program agents unavailable: ${state.error} Links and controls are disabled until refreshed.`) : null,
-      !state.runs.length && !state.loading && !state.error ? h('p', { style: { padding: '0 12px' } }, 'No programs in this Session. Start one with the program_start tool.') : null,
-      state.truncated ? h('p', { style: { padding: '0 12px', fontSize: 11 } }, `Showing up to ${CLIENT_LIMITS.runs} programs; older entries are omitted.`) : null,
-      ...state.runs.map(run => h(RunCard, { key: actionKey(run), run, state, controller })),
+    open ? h('div', { 'data-program-foldout': true, style: { maxHeight: 'min(240px, 35vh)', overflowY: 'auto', overscrollBehavior: 'contain' } },
+      !state.items.length && !state.loading ? h('div', { style: { padding: '5px 9px', ...mutedStyle } }, 'No programs configured.') : null,
+      state.truncated ? h('div', { style: { padding: '3px 9px', ...mutedStyle } }, 'Showing the most recent programs.') : null,
+      ...state.items.map(item => h(ProgramRow, { key: item.program, item, state, controller })),
     ) : null,
   );
 }
-/** A Session switch always remounts local drafts/state; no previous Session content can flash. */
+/** A Session switch remounts local state; no previous owner's content can flash. */
 export function ProgramAgentsDock({ programClient }: { programClient: ProgramClient }) {
   return h(ProgramAgentsPanel, { key: programClient.sessionId, client: programClient });
 }

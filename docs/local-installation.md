@@ -1,5 +1,7 @@
 # Local installation — 2026-10-19
 
+**Superseded UI/runtime revision installed2026-10-20:** see `composer-strip.md` for current compact pushed strip, program_register/command watch support and active `program-agents-strip-v5` entry. The record below is the initial installation history, not the current transport/control design.
+
 Installed on this Mac into the **existing web profile**, without restarting DSH.
 
 - GUI: http://127.0.0.1:3080 (existing server, PID11160 during test)
