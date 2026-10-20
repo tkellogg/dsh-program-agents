@@ -1,5 +1,14 @@
 # Local installation — 2026-10-19
 
+## Current supervision revision — installed 2026-10-20
+
+Active entry **program-agents-strip-v8**, host `dist/host/installed-v8.js`. Existing GUI still http://127.0.0.1:3080 and original Node PID11160; no server restart/replacement, no auth/session/model changes. Model catalog before/after identical. Earlier v5/v6 entry cleanly disabled then replaced with fresh id/module URL to avoid ESM cache. Final browser refresh: zero Runtime exceptions; compact strip remains bottom sticky,95px expanded, pinned while long conversation scrolls to top. Existing Watch demo restored and healthy at http://127.0.0.1:4317/ after host upgrade.
+
+Full strict build +106/106 tests (installed HostConnection/browser carriers included); actual command launched through live program tools, `program_inbox_send` accepted test message, app received with correlation and ACKed it. Read-only SQLite verification: acked_at set, attempts1; private app JSONL contains matching operation/message IDs. Disposable Inbox smoke process stopped and its launch description removed; no temporary smoke worker remains. Structured ERROR/model dispatch testing uses isolated exact-parent adapter and mocked recipient/delegation to avoid synthetic LLM calls; external MCP/model inference was not exercised.
+
+Canonical program-agents skill updated in `~/.local/skills/program-agents` including inboxes.md, log-format.md and schema copies; user SKILL.md edits preserved. Existing `~/.dsh/skills` and `~/.agents/skills` symlinks unchanged. New settings and APIs documented in supervision.md. User's existing registrations were not opted into startup/restart silently.
+
+
 **Superseded UI/runtime revision installed2026-10-20:** see `composer-strip.md` for current compact pushed strip, program_register/command watch support and active `program-agents-strip-v5` entry. The record below is the initial installation history, not the current transport/control design.
 
 Installed on this Mac into the **existing web profile**, without restarting DSH.

@@ -5,6 +5,10 @@ export interface ProgramGrant extends ProgramDefinition {
   models?: Array<{provider: string; model: string}>;
   /** Exact visible DSH tool names; empty denies tool execution. */
   tools?: string[];
+  /** Explicit host function names and MCP public tools (policy still applies). */
+  functions?:string[];
+  mcp?:Array<{server:string;tools:string[]}>;
+  messaging?:boolean;
   maxModelOutputTokens?: number;
 }
 export interface PluginConfig {

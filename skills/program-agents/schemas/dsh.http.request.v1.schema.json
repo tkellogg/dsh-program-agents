@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dsh.dev/schemas/dsh.http.request.v1.schema.json",
+  "title": "dsh.http.request.v1 required data payload",
+  "type": "object",
+  "required": ["method", "path", "status"],
+  "properties": {
+    "method": {"type": "string", "minLength": 1, "maxLength": 32},
+    "path": {"type": "string"},
+    "status": {"type": "integer", "minimum": 100, "maximum": 599},
+    "duration_ms": {"type": "number", "minimum": 0}
+  },
+  "additionalProperties": true
+}

@@ -58,6 +58,7 @@ interface Run {
   closeTimer?: NodeJS.Timeout;
   eventTimer?: NodeJS.Timeout;
   restarting: boolean;
+  bridgeRegistered?: boolean;
 }
 
 /** Process isolation for trusted programs, not an OS security sandbox. */
@@ -111,6 +112,7 @@ export class ProgramSupervisor {
       command: definitionCommand(definition),
       urls: (definition.urls ?? []).map((resource) => normalizeResource(resource)),
       ...(definition.logsPath === undefined ? {} : { logsPath: definition.logsPath }),
+      ...(definition.supervision === undefined ? {} : { supervision: structuredClone(definition.supervision) }),
     }));
   }
 
@@ -264,6 +266,7 @@ export class ProgramSupervisor {
     snapshot.command = definitionCommand(definition);
     snapshot.resources = (definition.urls ?? []).map((resource) => normalizeResource(resource));
     if (definition.logsPath !== undefined) snapshot.logsPath = definition.logsPath;
+    if (definition.supervision !== undefined) snapshot.supervision = structuredClone(definition.supervision);
     return { snapshot, definition, finishing: false, input, identity: { runId: snapshot.id, generation: snapshot.generation, token: randomBytes(24).toString('hex') }, controller: new AbortController(), hello: deferred(), closed: deferred(), helloReceived: false, exitObserved: false, closeObserved: false, closeProven: false, shutdownStarted: false, calls: new Map(), lastCallId: 0, inbox: new Map(), nextInboxId: 0, protocolWindow: Date.now(), protocolCount: 0, parentWindow: Date.now(), parentCount: 0, logBytes: 0, sequence: 0, restarting: false };
   }
 
@@ -282,6 +285,15 @@ export class ProgramSupervisor {
       const inherited = ['PATH', 'SystemRoot', 'WINDIR', 'TMPDIR', 'TEMP', 'TMP', 'LANG', 'LC_ALL', 'TZ', ...(command ? ['HOME'] : [])];
       for (const key of inherited) if (process.env[key] !== undefined) env[key] = process.env[key];
       Object.assign(env, run.definition.env);
+      // Never inherit a previous run's credentials, even from an explicit command environment.
+      for (const key of Object.keys(env)) if (key.startsWith('DSH_PROGRAM_')) delete env[key];
+      if (this.options.bridge) {
+        // Mark before invoking so partial setup failures are also revoked.
+        run.bridgeRegistered = true;
+        const bridgeEnv = this.options.bridge.environment(this.snapshot(run), structuredClone(run.definition));
+        if (!isRecord(bridgeEnv) || Object.keys(bridgeEnv).length > 16 || Object.entries(bridgeEnv).some(([key, value]) => !/^DSH_PROGRAM_[A-Z_]+$/.test(key) || typeof value !== 'string' || value.includes('\0') || value.length > 8192)) throw new ProgramError('INVALID_CONFIG', 'Invalid program bridge environment');
+        Object.assign(env, bridgeEnv);
+      }
       let child: ChildProcess;
       if (command) {
         child = spawn(command[0]!, command.slice(1), { cwd: run.definition.cwd, env, detached: true, shell: false, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -351,10 +363,21 @@ export class ProgramSupervisor {
     stream.on('data', (buffer: Buffer) => {
       run.logFile?.append(buffer);
       const text = decoder.write(buffer);
+      this.output(run, text, name);
       // Keep only a bounded tail of each incoming chunk, while always draining the pipe.
       this.log(run, name, text);
     });
-    stream.on('end', () => this.log(run, name, decoder.end()));
+    stream.on('end', () => {
+      const text = decoder.end();
+      this.output(run, text, name);
+      this.log(run, name, text);
+    });
+  }
+
+  private output(run: Run, text: string, stream: 'stdout' | 'stderr'): void {
+    if (!text || !this.options.onOutput) return;
+    try { this.options.onOutput(this.snapshot(run), text, stream); }
+    catch { /* Output observers cannot interrupt pipe draining or process cleanup. */ }
   }
 
   private log(run: Run, stream: 'stdout' | 'stderr' | 'system', text: string): void {
@@ -525,6 +548,11 @@ export class ProgramSupervisor {
   }
 
   private revoke(run: Run): void {
+    if (run.bridgeRegistered) {
+      run.bridgeRegistered = false;
+      try { this.options.bridge?.revoke(this.snapshot(run)); }
+      catch { /* Revocation observers cannot obstruct mandatory process cleanup. */ }
+    }
     if (!run.controller.signal.aborted) run.controller.abort(new ProgramError('CANCELLED', 'Program generation ended'));
     for (const pending of run.calls.values()) { clearTimeout(pending.timer); pending.controller.abort(new ProgramError('CANCELLED', 'Program generation ended; effect outcome may be unknown')); }
     run.calls.clear();

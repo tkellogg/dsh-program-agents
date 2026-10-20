@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dsh.dev/schemas/dsh.program.error.v1.schema.json",
+  "title": "dsh.program.error.v1 optional data payload",
+  "description": "Payload schema only, not the full record. data may be omitted. Additional application/error metadata is allowed; errors under any other log_type are still monitored by ERROR level.",
+  "type": "object",
+  "additionalProperties": true
+}

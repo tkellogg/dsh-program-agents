@@ -16,7 +16,7 @@ async function fixture(){
  const registry=new Map([['parent',agent]]);
  const ctx:any={agents:{get:(id:string)=>registry.get(id),withInitiator:(a:any,fn:()=>unknown)=>{assert.equal(a,agent);return fn();}},logger:{warn:()=>{}}};
  const adapter=new DshProgramAdapter(ctx as Context,{auditDirectory:directory,programs:{worker:{entry:resolve('examples/dashboard.ts'),allowedCapabilities:['models.call','tools.call'],models:[{provider:'local',model:'tiny'}],tools:['read'],maxModelOutputTokens:4096}}});
- return{adapter,agent,registry,directory,steers,injects,get toolCalls(){return toolCalls},get modelCalls(){return modelCalls},async cleanup(){await adapter.supervisor.dispose();adapter.journal.close();await rm(directory,{recursive:true,force:true});}};
+ return{adapter,agent,registry,directory,steers,injects,get toolCalls(){return toolCalls},get modelCalls(){return modelCalls},async cleanup(){await adapter.dispose();await rm(directory,{recursive:true,force:true});}};
 }
 test('host tool capability preserves exact live owner and pipeline, no stale launch token',async()=>{
  const f=await fixture();try{f.adapter['owners'].set('parent',f.agent);const method=f.adapter.capabilities.get('tools.call')!;

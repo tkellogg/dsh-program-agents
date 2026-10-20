@@ -4,6 +4,13 @@ import { join } from 'node:path';
 import { AuditJournal } from './audit.js';
 import {ProgramCatalog} from './catalog.js';
 import {ProgramEvents} from './events.js';
+import {AppBridgeServer} from '../app/server.js';
+import {MessageStore} from '../app/mailbox.js';
+import {SupervisorRouter} from './agents.js';
+import {SupervisionPolicies} from './policies.js';
+import {ProgramOperations} from './operations.js';
+import {AppFunctions} from './functions.js';
+import type{ProgramDefinition}from'../types.js';
 import {resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import { BlockAssembler, createUserMessage, createSystemMessage, ReasoningEffortId } from '@deepseek-ai/dsh-llm';
@@ -30,15 +37,30 @@ export class DshProgramAdapter {
   private uiStarts=new Set<string>();
   readonly catalog:ProgramCatalog;
   readonly events:ProgramEvents;
+  readonly bridge:AppBridgeServer;
+  readonly mailbox:MessageStore;
+  readonly functions=new AppFunctions();
+  readonly router:SupervisorRouter;
+  readonly policies:SupervisionPolicies;
+  readonly operations:ProgramOperations;
+  private disposed=false;
+  private resumed=new Set<string>();
+  private servicesReady=false;
   constructor(readonly ctx: Context, readonly config: PluginConfig) {
     const root=join(process.env.DSH_HOME??join(homedir(),'.dsh'),'program-agents');
     this.journal=new AuditJournal(config.auditDirectory??join(root,'audit'));
     this.events=new ProgramEvents(owner=>this.view(owner));
+    const privateRoot=config.auditDirectory??root;
+    this.mailbox=new MessageStore(join(privateRoot,'inboxes.sqlite'));
+    this.bridge=new AppBridgeServer({handler:(context,method,input,signal)=>this.appCall(context.run,method,input,signal)});
+    this.router=new SupervisorRouter(join(privateRoot,'supervisors'),id=>this.resolveOwner(id),(agent,name,args,signal)=>this.executeAgentTool(agent,name,args,signal));
+    this.operations=new ProgramOperations(join(privateRoot,'error-outbox'),run=>this.definition(run.ownerId,run.program),async(run,body,signal)=>{await this.router.notify(run,this.definition(run.ownerId,run.program)?.supervision,json(body,65000),signal??AbortSignal.timeout(10000));});
+    this.policies=new SupervisionPolicies({definition:(owner,program)=>this.definition(owner,program),entries:()=>this.catalog.entries(),eligible:owner=>this.eligible(owner),live:(owner,program)=>this.supervisor.list(owner).some(r=>r.program===program&&['starting','running','blocked','stopping'].includes(r.state)),start:async(owner,program)=>{const agent=await this.resolveOwner(owner);return this.executeAgentTool(agent,'program_start',{program},AbortSignal.timeout(120000));},restart:async run=>{const agent=await this.resolveOwner(run.ownerId);return this.executeAgentTool(agent,'program_restart',{id:run.id,generation:run.generation},AbortSignal.timeout(120000));},report:(run,error)=>{this.ctx.logger.warn('Program supervision action failed: '+String(error));this.operations.failed({...run,error:String(error)});}});
     this.capabilities.register({name:'models.call',description:'One explicit text model call using an allowed DSH route; no automatic tool loop.',handler:(input,c)=>this.model(input,c.run,c.signal)});
     this.capabilities.register({name:'tools.call',description:'Call an explicitly allowed visible DSH tool through policy. Native presentation only.',handler:(input,c)=>this.tool(input,c.run,c.signal)});
     try{
     this.supervisor = new ProgramSupervisor({
-      programs: Object.fromEntries(Object.entries(config.programs??{}).map(([name,{models,tools,maxModelOutputTokens,...definition}])=>{
+      programs: Object.fromEntries(Object.entries(config.programs??{}).map(([name,{models,tools,functions,mcp,messaging,maxModelOutputTokens,...definition}])=>{
         // Schemastery fills optional array fields with []; preserve entry XOR argv.
         if(!definition.command?.length)delete definition.command;
         if(definition.command&&!definition.args?.length)delete definition.args;
@@ -46,6 +68,8 @@ export class DshProgramAdapter {
       })),  capabilities:this.capabilities,
       logDirectory:config.logDirectory??(config.auditDirectory?join(config.auditDirectory,'logs'):join(root,'logs')),
       bootstrapDirectory:fileURLToPath(new URL('../runtime/',import.meta.url)),
+      bridge:{environment:(run,definition)=>this.bridge.register(run,definition).env,revoke:run=>{this.bridge.revoke(run);this.mailbox.releaseClaims({ownerId:run.ownerId,program:run.program,claimant:run.id+':'+run.generation});}},
+      onOutput:(run,chunk,stream)=>this.operations.output(run,chunk,stream),
       maxRuns:config.maxRuns,maxHistory:config.maxHistory,startupTimeoutMs:config.startupTimeoutMs,stopTimeoutMs:config.stopTimeoutMs,callTimeoutMs:config.callTimeoutMs,
       onParentMessage:async(ownerId,body,run,signal)=>{
         signal.throwIfAborted(); const owner=this.owner(ownerId);
@@ -55,7 +79,7 @@ export class DshProgramAdapter {
         if(bucket.count>=10)throw new Error('Parent notification rate limit (10/minute)');
         bucket.count++;this.notices.set(run.id,bucket);
         this.audit(run,randomUUID(),'parent.send','accepted',body);
-        owner.steer(createUserMessage({content:[{type:'text',text:`Program ${run.label} (${run.id}, generation ${run.generation}) sent data:\n${JSON.stringify(body)}`}],source:{kind:'program-agent',runId:run.id,generation:run.generation}}));
+        await this.router.notify(run,this.definition(run.ownerId,run.program)?.supervision,body,signal);
       },
       onEvent:event=>{
         const r=event.run,key=r.id,signature=`${r.generation}:${r.state}`;
@@ -69,13 +93,76 @@ export class DshProgramAdapter {
         const owner=this.owners.get(r.ownerId);
         if(!owner||this.ctx.agents.get(owner.id)!==owner)return;
         try{this.journal.append({type:'lifecycle',ownerId:r.ownerId,runId:r.id,generation:r.generation,program:r.program,state:r.state});}catch{this.ctx.logger.warn('Program lifecycle journal full or unavailable');}
-        // Ordinary stop/completion belongs in the live strip, not a chat notice.
-        if(r.state==='failed')owner.inject(createUserMessage({content:[{type:'text',text:`Program ${r.name??r.label} failed. Inspect program_list and logsPath; do not automatically retry side effects.`}],source:{kind:'program-agent',runId:r.id,generation:r.generation}}));
+        if(r.state==='running')this.operations.started(r);
+        if(r.state==='failed')this.operations.failed(r);
+        if(['stopped','failed','completed'].includes(r.state))this.operations.terminal(r);
+        this.policies.changed(r);
       }
     });
     }catch(error){this.events.dispose();this.journal.close();throw error;}
     this.catalog=new ProgramCatalog(config.catalogDirectory??(config.auditDirectory?join(config.auditDirectory,'catalog'):join(root,'catalog')),this.supervisor,new Set(Object.keys(config.programs??{})));
   }
+  definition(ownerId:string,program:string):ProgramDefinition|undefined{return this.catalog?.definition(ownerId,program)??this.config.programs?.[program];}
+  eligible(ownerId:string){
+    if(this.disposed||!this.servicesReady)return false;
+    const registry=this.ctx.get?.('workspaceRegistry')as{archivedSessionIds:readonly string[]}|undefined;
+    return registry!==undefined&&!registry.archivedSessionIds.includes(ownerId);
+  }
+  async resolveOwner(ownerId:string):Promise<Agent>{
+    if(this.disposed)throw Error('Plugin unloading');
+    const registry=this.ctx.get?.('workspaceRegistry')as{archivedSessionIds:readonly string[]}|undefined;
+    if(registry?.archivedSessionIds.includes(ownerId))throw Error('Parent Session is archived');
+    let agent=this.ctx.agents.get(ownerId as never);
+    if(!agent){const controller=this.ctx.get?.('sessionController')as{resolveAgent:(id:string)=>Promise<{agent?:Agent;error?:unknown}>}|undefined;if(!controller)throw Error('Parent Session is not live');const result=await controller.resolveAgent(ownerId);if(!result.agent)throw Error('Cannot restore parent Session');agent=result.agent;this.resumed.add(ownerId);}
+    await this.bindOwner(agent);return agent;
+  }
+  async executeAgentTool(agent:Agent,name:string,args:JsonValue,signal:AbortSignal):Promise<unknown>{
+    if(this.ctx.agents.get(agent.id)!==agent)throw Error('Agent is no longer live');
+    const result=await this.ctx.agents.withInitiator(agent,()=>agent.ctx.tools.execute({callId:`program-${name}-${randomUUID()}`as never,name,arguments:args as never,agent,signal}));
+    if(result.isError)throw Error('Parent policy or tool rejected '+name);
+    return'value'in result?result.value:result;
+  }
+  async restoreStartup(){this.servicesReady=true;await this.bridge.ready;for(const entry of this.catalog.entries())if(this.eligible(entry.ownerId))this.operations.restore({id:'restored',generation:0,ownerId:entry.ownerId,program:entry.program,label:entry.definition.name??entry.program,state:'stopped',startedAt:'',logs:[],messages:[],resources:[]});await this.policies.startup();}
+  async sessionCreated(agent:Agent){if(!this.servicesReady)return;await this.policies.startup(String(agent.id));}
+  async stopSession(ownerId:string){this.policies.archive(ownerId);await Promise.allSettled(this.supervisor.list(ownerId).filter(r=>['starting','running','blocked','stopping'].includes(r.state)).map(r=>this.stop(r.id,ownerId)));}
+  async stop(id:string,ownerId:string){const run=this.supervisor.get(id,ownerId);this.policies.manualStop(run);return this.supervisor.stop(id,ownerId);}
+  async restart(id:string,ownerId:string){return this.supervisor.restart(id,ownerId);}
+  async appCall(run:ProgramSnapshot,method:string,input:JsonValue,signal:AbortSignal):Promise<JsonValue>{
+    const live=this.supervisor.get(run.id,run.ownerId);if(live.generation!==run.generation||!['starting','running','blocked'].includes(live.state))throw Error('Run authority revoked');
+    const owner=this.owner(run.ownerId),o=object(input??{}),configured=this.config.programs?.[run.program];
+    const access={...this.catalog.access(run.ownerId,run.program),...configured};
+    const scope={ownerId:run.ownerId,program:run.program,claimant:run.id+':'+run.generation};
+    if(method==='inbox.receive'){exactKeys(o,['waitMs','leaseMs']);return json(await this.mailbox.receive(scope,o as never,signal));}
+    if(method==='inbox.ack'||method==='inbox.nack'){exactKeys(o,['id','leaseToken']);return json(this.mailbox[method==='inbox.ack'?'ack':'nack'](scope,text(o.id,'id'),text(o.leaseToken,'leaseToken')));}
+    if(method==='inbox.receipt'){exactKeys(o,['id']);return json(this.mailbox.receipt(scope,text(o.id,'id')));}
+    if(method==='supervisor.send'){exactKeys(o,['body','correlationId']);return json(await this.router.notify(run,this.definition(run.ownerId,run.program)?.supervision,json(o.body),signal,o.correlationId===undefined?undefined:text(o.correlationId,'correlationId')));}
+    if(method==='agents.list'||method==='agents.get'||method==='agents.send'){
+      if(!access.messaging)throw Error('Agent messaging not granted');
+      if(method==='agents.list'){exactKeys(o,[]);return json(await this.router.list(run.ownerId,signal));}
+      const id=text(o.id,'agent id');if(method==='agents.get'){exactKeys(o,['id']);return json((await this.router.list(run.ownerId,signal)).find(a=>a.id===id)??null);}
+      exactKeys(o,['id','body','correlationId']);return json(await this.router.send(run.ownerId,id,json(o.body),signal,o.correlationId===undefined?undefined:text(o.correlationId,'correlationId')));
+    }
+    if(method==='functions.list'){exactKeys(o,[]);return json(this.functions.list(access.functions??[]));}
+    if(method==='functions.call'){exactKeys(o,['name','args']);const name=text(o.name,'function'),args=json(o.args??null),effectId=randomUUID();this.audit(run,effectId,'function:'+name,'started',args);try{const result=json(await this.functions.call(name,args,access.functions??[],run,signal),57344);this.audit(run,effectId,'function:'+name,'settled',result);return result;}catch(error){this.audit(run,effectId,'function:'+name,signal.aborted?'outcome-unknown':'failed',null);throw error;}}
+    if(method==='mcp.list'){exactKeys(o,[]);return json((access.mcp??[]).flatMap(server=>server.tools.map(tool=>({server:server.server,tool,name:`mcp__${server.server}__${tool}`}))));}
+    if(method==='mcp.call'){exactKeys(o,['server','tool','args']);const server=text(o.server,'server'),tool=text(o.tool,'tool');if(!access.mcp?.some(row=>row.server===server&&row.tools.includes(tool)))throw Error('MCP tool not granted');return this.dispatchTool(run,`mcp__${server}__${tool}`,json(o.args??{}),signal);}
+    if(method==='tools.call'){exactKeys(o,['name','args']);const name=text(o.name,'tool');if(!access.tools?.includes(name)||name.startsWith('program_')||name==='run_code')throw Error('Tool not granted');return this.dispatchTool(run,name,json(o.args??{}),signal);}
+    if(method==='models.call')return this.model(input,run,signal);
+    const capability=this.capabilities.get(method);if(capability&&this.definition(run.ownerId,run.program)?.allowedCapabilities?.includes(method))return capability.handler(input,{run,signal});
+    throw Error('Unknown or ungranted app function');
+  }
+  private async dispatchTool(run:ProgramSnapshot,name:string,args:JsonValue,signal:AbortSignal){
+    const owner=this.owner(run.ownerId);if(!owner.ctx.tools.get(name,owner)||!owner.ctx.tools.schemas(owner).some(s=>s.name===name))throw Error('Tool unavailable on parent native surface');
+    const effectId=randomUUID();this.audit(run,effectId,name,'started',args);
+    try{const value=json(await this.executeAgentTool(owner,name,args,signal),57344);this.audit(run,effectId,name,'settled',value);return value;}catch(error){this.audit(run,effectId,name,signal.aborted?'outcome-unknown':'failed',null);throw error;}
+  }
+  async sendInbox(sender:Agent,parentId:string,program:string,body:JsonValue,correlationId?:string){
+    if(this.ctx.agents.get(sender.id)!==sender)throw Error('Sender is no longer live');
+    if(String(sender.id)!==parentId){const parent=await this.resolveOwner(parentId);if(!this.ctx.agents.isOwnedBy(sender.id,parent)&&!(await this.router.list(parentId,new AbortController().signal)).some(a=>a.id===String(sender.id)&&a.relation==='child'))throw Error('Only this parent or its direct supervisor child may send to this inbox');}
+    if(!this.catalog.visible(parentId,program))throw Error('Program not registered for this parent');
+    return this.mailbox.send({ownerId:parentId,program},{from:String(sender.id),body,...correlationId?{correlationId}:{}});
+  }
+  async dispose(){if(this.disposed)return;this.disposed=true;this.policies.dispose();this.events.dispose();await this.operations.dispose();await this.supervisor.dispose();await this.bridge.dispose();this.mailbox.close();this.journal.close();}
   view(ownerId:string){
     const programs=this.catalog.list(ownerId);
     // Browser synchronization needs launch metadata/state, never chat or log payloads.
@@ -117,13 +204,16 @@ export class DshProgramAdapter {
     return owner;
   }
   async start(agent:Agent,program:string,input:JsonValue=null,label?:string,signal?:AbortSignal){
-    await this.bindOwner(agent);
+    await this.bridge.ready;await this.bindOwner(agent);
+    const registry=this.ctx.get?.('workspaceRegistry')as{archivedSessionIds:readonly string[]}|undefined;if(registry?.archivedSessionIds.includes(String(agent.id)))throw Error('Parent Session is archived');
     if(!this.catalog.visible(String(agent.id),program))throw Error('Program is not registered for this parent');
+    await this.operations.prepare({id:'starting',generation:0,ownerId:String(agent.id),program,label:label??program,state:'starting',startedAt:new Date().toISOString(),logs:[],messages:[],resources:[]});
+    this.policies.manualStart(String(agent.id),program);
     return this.supervisor.start({program,ownerId:String(agent.id),input,...(label?{label}:{})},signal);
   }
   async ownerDisposed(agent:Agent):Promise<void> {
     if(this.owners.get(String(agent.id))!==agent)return;
-    this.owners.delete(String(agent.id));
+    this.policies.archive(String(agent.id));this.owners.delete(String(agent.id));
     const id=String(agent.id),task=this.supervisor.revokeOwner(id);this.revoking.set(id,task);
     try{await task;}finally{if(this.revoking.get(id)===task)this.revoking.delete(id);this.events.changed(id);}
   }

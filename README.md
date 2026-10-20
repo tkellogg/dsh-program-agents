@@ -6,6 +6,14 @@ A compact **Program agents (N)** strip lives above the parent's message composer
 
 Experimental0.2 implementation for DSH0.2.1-rc.2; Node22.18+ on macOS/Linux. Local checkout, not published. Installed in this Mac's existing GUI; see `docs/local-installation.md` and `docs/composer-strip.md`.
 
+## Monitoring, app bridge and supervision
+
+New: `@tkellogg/dsh-program-agents/app` works with ordinary watched commands. `connectProgram()` exposes supervisor messaging, granted Functions/MCP/tools/models, adjacent Agent lookup/messaging, and durable SQLite inbox receive/lease/ACK/NACK/receipt. No special entrypoint required.
+
+Standard JSONL `ERROR` logs from stdout/stderr or registered logsPath are automatically deduplicated/buffered into the configured parent, reusable supervisor child, or fresh child. Versioned `log_type` identifies stable extensible monitoring schemas; see `docs/log-format.md` and shipped `schemas/`. Structured logger supports operation IDs, rotation, private files and secret-key redaction.
+
+`program_register` accepts optional `supervision` (restart never/on-failure/always, bounded budget/backoff, startAtStartup, supervisor route, error buffering) and exact `access` grants. Defaults preserve manual process control. Startup resolves existing parent Sessions and never starts archived Sessions; archival participates in activity admission/stop. See `docs/supervision.md` and `skills/program-agents/inboxes.md`.
+
 ## Default workflow
 
 1. Build an app using a foreground **watch/reload** command.
@@ -76,7 +84,7 @@ Ordinary configured programs can use `command: [pnpm, run, dev]` instead of `ent
 
 ## Optional SDK and broker capabilities
 
-Ordinary commands require **no SDK**, have no IPC inbox/model keys, and can serve their own APIs. For explicit DSH models/tools, dynamic URLs/status and exceptional parent coordination, export a default SDK entry:
+Ordinary commands require **no special SDK entrypoint** and can serve their own APIs. Optional app bridge supplies durable inboxes and granted calls via per-run credentials, never raw model keys. For explicit DSH models/tools, dynamic URLs/status and exceptional parent coordination, export a default SDK entry:
 
 ```ts
 import type { ProgramContext } from '@tkellogg/dsh-program-agents/sdk';
@@ -87,17 +95,17 @@ export default async function main(ctx: ProgramContext) {
 }
 ```
 
-`ctx.parent.send` remains a bounded internal coordination primitive. Parent processes it automatically; user need not relay/acknowledge messages. Status/log updates don't wake the LLM; normal stop/completion does not inject a chat notice. Failure may add passive context for the parent's next step.
+`ctx.parent.send` remains a bounded internal coordination primitive. Parent processes it automatically; user need not relay/acknowledge messages. INFO/DEBUG/status updates don't wake the LLM; standard ERROR logs and synthetic process failures are buffered into the configured supervisor automatically. Normal stop/completion does not inject a chat notice.
 
-Named `allowedCapabilities`, exact `models:[{provider,model}]` and `tools:[name]` grants are trusted host config. Dynamic command registration does not grant subscriptions/tools. `models.call` is one bounded assembled text call (not token streaming/tool loop); `tools.call` traverses the live parent's public policy with fresh identity, no expired tool token. Third-party host plugins can register JSON handlers via `ctx.programAgents.capabilities.register(...)`; validate inputs, honor cancellation, return JSON. No automatic effect retries.
+Named `allowedCapabilities`, exact `models:[{provider,model}]` and `tools:[name]` grants are trusted host config. Dynamic commands can request exact persisted access allowlists; they don't gain broad subscriptions/tools, and parent public tool policy still applies. `models.call` is one bounded assembled text call (not token streaming/tool loop); `tools.call` traverses the live parent's public policy with fresh identity, no expired tool token. Third-party host plugins can register JSON handlers via `ctx.programAgents.capabilities.register(...)`; validate inputs, honor cancellation, return JSON. No automatic effect retries.
 
 ## Lifecycle, privacy and limits
 
 **Trusted local code only. A Node child/process group is not an OS sandbox.** Ordinary code can access filesystem/network under your account; allowlists gate only the DSH broker. Minimal child env omits secrets/NODE_OPTIONS; command mode inherits HOME for package caches. No arbitrary command from browser: it can only select this parent's registered definition. UI mutations traverse parent tool policy.
 
-Start returns after spawn/SDK connection, not app readiness. Stop requests cooperative shutdown then forced process-group cleanup; restart requires proven old-group exit. Watchers may reload their own workers; the supervisor does not auto-retry a failed watcher/effect. Parent turn completion keeps runs; parent disposal/plugin unload revokes/stops them. Replacement live Agent for same Session can explicitly reauthorize after cleanup; old restarting epochs remain fenced.
+Start returns after spawn/SDK connection, not app readiness. Stop requests cooperative shutdown then forced process-group cleanup; restart requires proven old-group exit. Watchers may reload their own workers; opted-in process recovery restarts failed watchers with budget/backoff, never individual effects. Parent turn completion keeps runs; parent disposal/plugin unload revokes/stops them. Replacement live Agent for same Session can explicitly reauthorize after cleanup; old restarting epochs remain fenced.
 
-Launch metadata/catalog and private supervisory audit persist locally, **execution state does not**. App databases/queues/checkpoints/idempotency belong to the program. Interrupted effects can have unknown outcome; verify before retry. No exactly-once promise, replay, auto-restore, Python, native subagent-tree membership or program-spawned LLM agent API.
+Launch metadata/catalog and private supervisory audit persist locally, **execution state does not**. App databases/queues/checkpoints/idempotency belong to the program. Interrupted effects can have unknown outcome; verify before retry. No exactly-once execution promise or interrupted-effect replay. Opted-in startup restores launch descriptions, not app memory; durable app inbox is a separate transport. Programs themselves remain supervised processes, not native LLM Agents; configured supervisor children use normal DSH delegation.
 
 SSE sends initial compact snapshot + coalesced changes, suppresses identical updates,15s heartbeat; reconnect only on transport loss, no list polling.64streams/128KiBframe; slow clients close/reconnect to a fresh snapshot. Hidden tabs abort and reconnect on visibility. Stale links/actions are disabled. Internal runtime IPC64KiB,32pending/globalnoncooperative calls,64inbox/sends, bounded log/message/history rings. UI shows at most50 programs, foldout min(240px,35vh). URLs are not fetched, embedded or proxied; remote-host localhost needs explicit forwarding.
 

@@ -1,3 +1,5 @@
+import type { SupervisionSettings } from './supervision.js';
+
 /** JSON is the only value boundary between a supervised process and its host. */
 export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 
@@ -17,6 +19,8 @@ export interface ProgramDefinition {
   args?: string[];
   env?: Record<string, string>;
   allowedCapabilities?: string[];
+  /** Trusted host policy; not permission granted by program-controlled input. */
+  supervision?: SupervisionSettings;
 }
 
 export interface ProgramDescriptor {
@@ -26,6 +30,7 @@ export interface ProgramDescriptor {
   command: string[];
   urls: ProgramResource[];
   logsPath?: string;
+  supervision?: SupervisionSettings;
 }
 
 export interface ProgramLog {
@@ -61,6 +66,7 @@ export interface ProgramSnapshot {
   description?: string;
   command?: string[];
   logsPath?: string;
+  supervision?: SupervisionSettings;
   state: ProgramState;
   status?: string;
   pid?: number;
@@ -128,6 +134,13 @@ export interface ProgramSupervisorOptions {
   capabilities?: CapabilityRegistryLike;
   onParentMessage?: (ownerId: string, message: JsonValue, run: ProgramSnapshot, signal: AbortSignal) => Promise<void>;
   onEvent?: (event: ProgramEvent) => void;
+  /** Observer of decoded raw output, before bounded snapshot truncation. */
+  onOutput?: (run: ProgramSnapshot, chunk: string, stream: 'stdout' | 'stderr') => void;
+  /** Synchronous credential setup before spawn; revoke is called before process cleanup. */
+  bridge?: {
+    environment(run: ProgramSnapshot, definition: ProgramDefinition): Record<string, string>;
+    revoke(run: ProgramSnapshot): void;
+  };
   maxRuns?: number;
   maxHistory?: number;
   startupTimeoutMs?: number;

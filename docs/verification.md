@@ -2,7 +2,13 @@
 
 Implementation date:2026-10-19, macOS AppleSilicon Node26.12.0, pnpm12.14.0; DSH0.2.1-rc.2/Cordis4.0.5.
 
-## Current composer-strip revision (2026-10-20)
+## Current monitoring/supervision revision (2026-10-20)
+
+Strict build + **106/106 tests pass**, zero failed/skipped with both installed DSH carriers enabled. Adds actual command bridge env/revocation, loopback auth/envelope/concurrency/deadlines, durable SQLite inbox leases/ACK/NACK/correlation/receipts, exact function/MCP grant+public-tool policy, automatic stdout/file ERROR-to-parent, typed schema validation/extensions, redaction/rotation/cursors, durable error batching/dedup/backpressure/noncooperative delivery slots/bounded shutdown, fatal exception/rejection logger exit, cold parent resume/startup/archive exclusion, real bounded failure-restart and supervisor route/receipt/rate tests.
+
+Live: final installed host v8 is active on existing DSH PID11160; refreshed actual GUI has no Runtime exceptions and retains bottom sticky95px composer foldout. Live `program_inbox_send` receipt became acked with matching app JSONL/correlation and attempts1. Disposable worker stopped, Watch demo restored healthy, model catalog unchanged. No live model inference/synthetic child generation/external MCP server invoked; child-routing and MCP execution use actual router/tool APIs with mocked services.
+
+## Previous composer-strip revision (2026-10-20)
 
 Strict build + **61/61 tests pass**, zero failed/skipped, both installed-carrier compatibility checks enabled. Includes ordinary command/watch source-edit reload, process-group cleanup, metadata/catalog persistence, real tail-able bounded log files, owner reauthorization epochs, SSE initial/coalesced/scoped/auth/abort/dispose behavior, compact DOM/no message UI, Start public-parent policy dispatch and pre-push double-click fencing. Live actual GUI pin/Start/SSE/watch checks are recorded in composer-strip.md. The initial implementation evidence below is historical where its polling/message UI differs.
 

@@ -1,5 +1,6 @@
 import { isAbsolute, resolve } from 'node:path';
 import type { ProgramDefinition, ProgramResource } from '../types.js';
+import { normalizeSupervision } from '../supervision.js';
 import { exactKeys, isRecord, ProgramError, RUNTIME_LIMITS, validName } from './protocol.js';
 
 const controls = /[\u0000-\u001f\u007f]/;
@@ -29,7 +30,7 @@ export function normalizeResource(input: unknown, available = false, requireType
 
 /** Definitions execute trusted code, but config/metadata still have bounded exact shapes. */
 export function normalizeDefinition(program: string, input: ProgramDefinition): ProgramDefinition {
-  if (!validName(program) || !isRecord(input) || !exactKeys(input, [], ['entry', 'command', 'name', 'description', 'urls', 'logsPath', 'cwd', 'args', 'env', 'allowedCapabilities'])) throw new ProgramError('INVALID_CONFIG', 'Invalid program definition');
+  if (!validName(program) || !isRecord(input) || !exactKeys(input, [], ['entry', 'command', 'name', 'description', 'urls', 'logsPath', 'cwd', 'args', 'env', 'allowedCapabilities', 'supervision'])) throw new ProgramError('INVALID_CONFIG', 'Invalid program definition');
   const entry = input.entry;
   const command = input.command;
   if ((entry === undefined) === (command === undefined)) throw new ProgramError('INVALID_CONFIG', 'Program requires exactly one of entry or command');
@@ -55,6 +56,9 @@ export function normalizeDefinition(program: string, input: ProgramDefinition): 
     }
   } catch (error) { throw new ProgramError('INVALID_CONFIG', error instanceof Error ? error.message : 'Invalid static resource'); }
   const cwd = resolve(input.cwd ?? process.cwd());
+  let supervision: ProgramDefinition['supervision'];
+  try { supervision = normalizeSupervision(input.supervision); }
+  catch (error) { throw new ProgramError('INVALID_CONFIG', error instanceof Error ? error.message : 'Invalid supervision settings'); }
   return {
     ...input,
     cwd,
@@ -62,6 +66,7 @@ export function normalizeDefinition(program: string, input: ProgramDefinition): 
     env: { ...(input.env as Record<string, string> | undefined) },
     allowedCapabilities: [...new Set(input.allowedCapabilities ?? [])],
     urls,
+    ...(supervision === undefined ? {} : { supervision }),
     ...(input.logsPath === undefined ? {} : { logsPath: resolve(cwd, input.logsPath) }),
   };
 }

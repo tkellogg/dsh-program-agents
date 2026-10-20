@@ -9,12 +9,15 @@
   "types": "./dist/host/index.d.ts",
   "exports": {
     ".": { "types": "./dist/host/index.d.ts", "default": "./dist/host/index.js" },
+    "./app": { "types": "./dist/app/index.d.ts", "default": "./dist/app/index.js" },
+    "./monitoring": { "types": "./dist/monitoring/index.d.ts", "default": "./dist/monitoring/index.js" },
+    "./supervision": { "types": "./dist/supervision.d.ts", "default": "./dist/supervision.js" },
     "./sdk": { "types": "./dist/sdk/index.d.ts", "default": "./dist/sdk/index.js" },
     "./runtime": { "types": "./dist/runtime/index.d.ts", "default": "./dist/runtime/index.js" },
     "./client": "./dist/client.js",
     "./package.json": "./package.json"
   },
-  "files": ["dist", "examples", "README.md", "LICENSE", "docs", "skills"],
+  "files": ["dist", "examples", "README.md", "LICENSE", "docs", "skills", "schemas"],
   "scripts": {
     "build": "tsc -p tsconfig.json && node scripts/build-client.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",

@@ -10,6 +10,9 @@ await copyFile('dist/host/plugin.js','dist/host/installed-v2.js');
 await copyFile('dist/host/plugin.js','dist/host/installed-v3.js');
 await copyFile('dist/host/plugin.js','dist/host/installed-v4.js');
 await copyFile('dist/host/plugin.js','dist/host/installed-v5.js');
+await copyFile('dist/host/plugin.js','dist/host/installed-v6.js');
+await copyFile('dist/host/plugin.js','dist/host/installed-v7.js');
+await copyFile('dist/host/plugin.js','dist/host/installed-v8.js');
 // Node deliberately refuses native TS stripping inside node_modules. Ship JS examples.
-await build({entryPoints:['examples/dashboard.ts','examples/standalone-supervisor.ts'],outdir:'dist/examples',bundle:false,format:'esm',platform:'node',target:'node22',sourcemap:false});
+await build({entryPoints:['examples/dashboard.ts','examples/standalone-supervisor.ts','examples/inbox-worker.ts'],outdir:'dist/examples',bundle:false,format:'esm',platform:'node',target:'node22',sourcemap:false});
 await writeFile('dist/client.js',`window.__ModuleLoader__.load({id:'@tkellogg/dsh-program-agents',factory:(require)=>{var module={exports:{}};var exports=module.exports;\n${body}\nreturn module.exports;}});\n`);
