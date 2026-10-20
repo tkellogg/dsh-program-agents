@@ -1,0 +1,13 @@
+# Local-checkout install: merge into the EXISTING web profile, do not replace it.
+# Update these absolute paths on another machine.
+- insert:
+    - id: program-agents
+      name: /Users/timkellogg/code/dsh-program-agents/dist/host/plugin.js
+      config:
+        programs:
+          dashboard:
+            entry: /Users/timkellogg/code/dsh-program-agents/dist/examples/dashboard.js
+            cwd: /Users/timkellogg/code/dsh-program-agents
+            allowedCapabilities: []
+        maxRuns: 8
+        maxHistory: 64

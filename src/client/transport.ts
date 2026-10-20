@@ -34,7 +34,7 @@ export function createProgramClient(rpc: RpcTransport, sessionId: string, timeou
         }, timeoutMs);
       });
       if (signal.aborted) return await failure;
-      const reply = await Promise.race([rpc.call('/program-agents', method, payload, abort.signal), failure]);
+      const reply = await Promise.race([rpc.call('/api', `programAgents/${method}`, payload, abort.signal), failure]);
       if (!reply.ok) throw new ProgramApiError(reply.error.code, reply.error.message);
       return reply.value;
     } finally {

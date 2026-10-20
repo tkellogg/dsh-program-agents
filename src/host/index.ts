@@ -6,6 +6,7 @@ import type { PluginConfig } from './contracts.js';
 import { DshProgramAdapter } from './adapter.js';
 import { object, text, json, exactKeys } from './validation.js';
 import type { ProgramSnapshot } from '../types.js';
+import {programFetch} from './http.js';
 export type { PluginConfig, ProgramGrant } from './contracts.js';
 export { DshProgramAdapter } from './adapter.js';
 export const name='program-agents';
@@ -37,13 +38,12 @@ export function apply(ctx:Context,config:PluginConfig={}){
   ctx.tools.register(defineTool({name:'program_list',description:'Inspect your supervised programs, including bounded logs, messages, state and available dashboard links.',parameters:{},output,execute:async(_args,exec)=>json(a.supervisor.list(String(caller(exec).id)),4*1048576)}));
   ctx.tools.register(defineTool({name:'program_send',description:'Send JSON input to one of your running programs. Delivery is in-memory acceptance, not durable processing.',parameters:{id:{type:'string',required:true},generation:{type:'integer',required:true},body:{type:'json',required:true}},output,execute:async(args,exec)=>{const owner=String(caller(exec).id);a.owner(owner);fence(a.supervisor.get(args.id,owner),args.generation);await a.supervisor.send(args.id,owner,args.body);return {accepted:true};}}));
   for(const action of ['stop','restart']as const)ctx.tools.register(defineTool({name:`program_${action}`,description:action==='stop'?'Stop a supervised program and its process group. Reports incomplete cleanup rather than claiming it stopped.':'Explicitly restart a program after stopping its previous generation. Application must restore its own state and deduplicate side effects.',parameters:{id:{type:'string',required:true},generation:{type:'integer',required:true}},output,execute:async(args,exec)=>{const owner=String(caller(exec).id);a.owner(owner);fence(a.supervisor.get(args.id,owner),args.generation);return json(await a.supervisor[action](args.id,owner),1048576);}}));
-  // A dedicated authenticated Connection channel; /api is owned by DSH Gateway.
-  // Fail closed for non-owner peers; no custom credentials or launcher endpoint.
+  // Exact Connection Fetch routes reuse /api's owner auth without replacing Gateway.
+  // rc.2 dedicated rpc.handle channels fail due to provider-side webServer injection.
   ctx.inject(['connection'],c=>{
-    const connection=c.get('connection') as unknown as Connection;
-    c.effect(()=>connection.rpc.handle('/program-agents',async(endpoint,payload,signal,peer)=>{
+    const connection=(c as Context & {connection:Connection}).connection;
+    const handler=async(endpoint:string,payload:unknown,signal:AbortSignal)=>{
       try{
-        if(peer.principal.kind!=='owner')throw new Error('Only the authenticated owner may access program controls');
         signal.throwIfAborted();
         if(!['list','send','stop','restart'].includes(endpoint))throw new Error('Unknown program endpoint');
         const p=object(payload);
@@ -56,11 +56,15 @@ export function apply(ctx:Context,config:PluginConfig={}){
         if(endpoint==='stop'||endpoint==='restart'){const method=endpoint==='stop'?'stop':'restart';return{ok:true,value:await a.supervisor[method](id,owner)};}
         throw new Error('Unknown program endpoint');
       }catch(error){return{ok:false,error:{code:'program-agents/rejected',message:error instanceof Error?error.message:'Program operation failed',details:{}}};}
-    }));
+    };
+    try{
+      for(const method of ['list','send','stop','restart'])c.effect(()=>connection.fetch.register({path:`/api/programAgents/${method}`,methods:['POST'],requestBody:'buffered',fetch:programFetch(method,handler)}));
+      a.journal.append({kind:'web-routes-registered',prefix:'/api/programAgents'});
+    }catch(error){a.journal.append({kind:'web-routes-failed',error:error instanceof Error?error.message:String(error)});throw error;}
   });
   return service;
 }
 export function fence(run:ProgramSnapshot,generation:unknown):void{
   if(!Number.isSafeInteger(generation)||run.generation!==generation)throw new Error('Stale program generation; refresh before retrying');
 }
-interface Connection {rpc:{handle(channel:string,handler:(endpoint:string,payload:unknown,signal:AbortSignal,peer:{principal:{kind:string}})=>Promise<unknown>):()=>Promise<void>}}
+interface Connection {fetch:{register(route:{path:string;methods:readonly string[];requestBody:'buffered';fetch:(request:Request)=>Promise<Response>}):()=>Promise<void>}}

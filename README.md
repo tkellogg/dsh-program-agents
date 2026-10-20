@@ -4,7 +4,7 @@
 
 A parent agent launches a configured Node program. The program does normal work, receives messages, explicitly calls allowed model/tool/plugin capabilities, and publishes dashboard links. If it needs help, it messages its parent. The parent can inspect logs, edit the source, and explicitly restart it.
 
-**Experimental v0.1**, targeting DSH **0.2.1-rc.2**, Node **22.18+** on **macOS/Linux (POSIX)** (developed on26). Windows is rejected rather than claim process-group cleanup guarantees. This repo is not published to npm. Built host/browser plugin, real-process tests, and isolated Cordis/DSH integration are included; installing into your running DSH is a separate explicit step.
+**Experimental v0.1**, targeting DSH **0.2.1-rc.2**, Node **22.18+** on **macOS/Linux (POSIX)** (developed on26). Windows is rejected rather than claim process-group cleanup guarantees. This repo is not published to npm. Built host/browser plugin, real-process tests, and isolated Cordis/DSH integration are included. On this Mac it is now installed into the existing web profile; see `docs/local-installation.md`. The generic install procedure below applies to other profiles.
 
 ## Quick start without DSH
 
@@ -49,23 +49,24 @@ Normal npm libraries handle databases, HTTP, scheduling, retries and application
 
 See `examples/dashboard.ts` for source and built `dist/examples/dashboard.js` for a working link-publishing program. Use the built JS when installed under `node_modules` (Node intentionally refuses native TS stripping there).
 
-## Install into DSH (not performed automatically)
+## Install into another DSH profile (never automatic)
 
 Build first and use an **absolute host entrypoint** in your profile patch. Review existing profile patches before merging; DSH config patch semantics replace complete config values.
 
 ```yaml
-- id: program-agents
-  name: /absolute/path/dsh-program-agents/dist/host/index.js
-  config:
-    programs:
-      dashboard:
-        entry: /absolute/path/dsh-program-agents/dist/examples/dashboard.js
-        allowedCapabilities: []
-    maxRuns: 8
-    maxHistory: 64
+- insert:
+    - id: program-agents
+      name: /absolute/path/dsh-program-agents/dist/host/plugin.js
+      config:
+        programs:
+          dashboard:
+            entry: /absolute/path/dsh-program-agents/dist/examples/dashboard.js
+            allowedCapabilities: []
+        maxRuns: 8
+        maxHistory: 64
 ```
 
-The installed DSH profile must provide `tools`, `agents`, and `llm` (standard web/headless profiles do). The web composition additionally provides `connection` and discovers the package's `dsh.client` browser contribution. It mounts a **Program agents** dock above the conversation composer. The plugin uses a dedicated authenticated `/program-agents` Connection channel—never replaces DSH's `/api` Gateway, never starts a second web server. Model-facing tools: `program_start`, `program_list`, `program_send`, `program_stop`, `program_restart`. All actions address the caller’s own programs; mutations include the expected generation.
+The installed DSH profile must provide `tools`, `agents`, and `llm` (standard web/headless profiles do). The web composition additionally provides `connection` and discovers the package's `dsh.client` browser contribution. It mounts a **Program agents** dock above the conversation composer. The plugin uses four exact authenticated Connection Fetch routes at `/api/programAgents/{list,send,stop,restart}`—never replaces DSH's `/api` Gateway interceptor, never starts a second web server. A new profile entry must use the `insert` wrapper shown above; a bare id-targeted patch cannot create it. Model-facing tools: `program_start`, `program_list`, `program_send`, `program_stop`, `program_restart`. All actions address the caller’s own programs; mutations include the expected generation.
 
 A simple prompt:
 

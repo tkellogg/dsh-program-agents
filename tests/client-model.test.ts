@@ -67,17 +67,17 @@ test('message mode is explicit and bounded', () => {
 });
 test('client uses the authenticated Connection carrier and generation-scoped named args', async () => {
   const calls: Array<{ channel: string; endpoint: string; payload: unknown; signal?: AbortSignal }> = [];
-  const rpc: RpcTransport = { async call(channel, endpoint, payload, signal) { calls.push({ channel, endpoint, payload, signal }); return { ok: true, value: endpoint === 'list' ? { runs: [run()] } : undefined }; } };
+  const rpc: RpcTransport = { async call(channel, endpoint, payload, signal) { calls.push({ channel, endpoint, payload, signal }); return { ok: true, value: endpoint === 'programAgents/list' ? { runs: [run()] } : undefined }; } };
   const client = createProgramClient(rpc, 'session-a'); const signal = new AbortController().signal;
   const result = await client.list(signal); assert.equal(result.runs.length, 1);
   await client.action('send', run(), { text: 'hello' }, signal);
   await client.action('stop', run(), undefined, signal);
   await client.action('restart', run({ state: 'stopped' }), undefined, signal);
   assert.deepEqual(calls.map(call => [call.channel, call.endpoint, call.payload]), [
-    ['/program-agents', 'list', { sessionId: 'session-a' }],
-    ['/program-agents', 'send', { sessionId: 'session-a', id: 'p1', generation: 2, body: { text: 'hello' } }],
-    ['/program-agents', 'stop', { sessionId: 'session-a', id: 'p1', generation: 2 }],
-    ['/program-agents', 'restart', { sessionId: 'session-a', id: 'p1', generation: 2 }],
+    ['/api', 'programAgents/list', { sessionId: 'session-a' }],
+    ['/api', 'programAgents/send', { sessionId: 'session-a', id: 'p1', generation: 2, body: { text: 'hello' } }],
+    ['/api', 'programAgents/stop', { sessionId: 'session-a', id: 'p1', generation: 2 }],
+    ['/api', 'programAgents/restart', { sessionId: 'session-a', id: 'p1', generation: 2 }],
   ]);
   assert.ok(calls.every(call => call.signal instanceof AbortSignal && !call.signal.aborted));
   await assert.rejects(client.action('stop', run({ ownerId: 'session-b' }), undefined, signal), /does not belong/);

@@ -33,16 +33,17 @@ window.__ModuleLoader__.load({
 The controller uses DSH's existing authenticated, mount-aware transport:
 
 ```ts
-ctx.connection.rpc.call('/program-agents', 'list', { sessionId }, signal);
-ctx.connection.rpc.call('/program-agents', 'send', { sessionId, id, generation, body }, signal);
-ctx.connection.rpc.call('/program-agents', 'stop', { sessionId, id, generation }, signal);
-ctx.connection.rpc.call('/program-agents', 'restart', { sessionId, id, generation }, signal);
+ctx.connection.rpc.call('/api', 'programAgents/list', { sessionId }, signal);
+ctx.connection.rpc.call('/api', 'programAgents/send', { sessionId, id, generation, body }, signal);
+ctx.connection.rpc.call('/api', 'programAgents/stop', { sessionId, id, generation }, signal);
+ctx.connection.rpc.call('/api', 'programAgents/restart', { sessionId, id, generation }, signal);
 ```
 
-The host registers the dedicated authenticated logical channel with
-`ctx.connection.rpc.handle('/program-agents', handler)`. Do not intercept `/api`:
-DSH's API Gateway already owns its sole interceptor. The Connection carrier
-validates authentication, method/path matching and request/response envelopes.
+The host registers exact authenticated `connection.fetch.register` routes at
+`/api/programAgents/{list,send,stop,restart}`. Do not intercept `/api`:
+DSH's API Gateway already owns its sole interceptor. Connection enforces owner
+admission before our strict RPC envelope bridge validates method and correlation.
+Dedicated rpc.handle is deliberately avoided due to an rc.2 provider injection defect.
 
 Connection results are `{ ok: true, value }` or
 `{ ok: false, error: { code, message, details } }`. List's value is

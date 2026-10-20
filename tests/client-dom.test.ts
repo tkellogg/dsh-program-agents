@@ -40,7 +40,7 @@ test('actual DOM card renders safe external links, inert unsafe URLs, escaped lo
   const calls: Array<{ endpoint: string; payload: unknown }> = [];
   const transport: RpcTransport = { async call(_channel, endpoint, payload) {
     calls.push({ endpoint, payload });
-    if (endpoint === 'list') return { ok: true, value: { runs: [current, baseRun({ id: 'secret', ownerId: 'session-b', label: 'PRIVATE SESSION' })] } };
+    if (endpoint === 'programAgents/list') return { ok: true, value: { runs: [current, baseRun({ id: 'secret', ownerId: 'session-b', label: 'PRIVATE SESSION' })] } };
     if (fail) return { ok: false, error: { code: 'failure', message: 'Host refused action.' } };
     return new Promise((_resolve, reject) => { rejectStop = reject; });
   } };
@@ -57,7 +57,7 @@ test('actual DOM card renders safe external links, inert unsafe URLs, escaped lo
     assert.ok(dom.container.textContent?.includes('<script>bad()</script>')); assert.ok(dom.container.textContent?.includes('Unsafe — unavailable'));
     await dom.click('Stop');
     assert.ok(dom.container.textContent?.includes('Stopping…')); assert.equal(dom.container.querySelectorAll('a').length, 0);
-    assert.deepEqual(calls.at(-1), { endpoint: 'stop', payload: { sessionId: 'session-a', id: 'p1', generation: 1 } });
+    assert.deepEqual(calls.at(-1), { endpoint: 'programAgents/stop', payload: { sessionId: 'session-a', id: 'p1', generation: 1 } });
     await act(async () => { rejectStop?.(new Error('Stop deadline reached.')); });
     assert.ok(dom.container.textContent?.includes('Stop deadline reached.')); assert.equal(dom.container.querySelectorAll('a').length, 1);
     current = baseRun({ generation: 2, state: 'completed' });
@@ -72,8 +72,8 @@ test('actual DOM card renders safe external links, inert unsafe URLs, escaped lo
 test('actual DOM sends text/JSON messages once and keeps invalid JSON local', async () => {
   const dom = setup(); const sends: unknown[] = [];
   const client = createProgramClient({ async call(_channel, endpoint, payload) {
-    if (endpoint === 'send') sends.push(payload);
-    return { ok: true, value: endpoint === 'list' ? { runs: [baseRun()] } : undefined };
+    if (endpoint === 'programAgents/send') sends.push(payload);
+    return { ok: true, value: endpoint === 'programAgents/list' ? { runs: [baseRun()] } : undefined };
   } }, 'session-a');
   try {
     await act(async () => dom.root.render(h(ProgramAgentsPanel, { client, pollIntervalMs: 0 })));

@@ -13,11 +13,11 @@ Implementation date:2026-10-19, macOS AppleSilicon Node26.12.0, pnpm12.14.0; DSH
 - Exampledashboard starts actualloopbackHTTPserver, publishesURL, acceptsmessage, stoprevokesresourceandcloseslistener.
 - Modeladapter unittest:exactrouteallowlist, freshcallid/owner/signal, recordedrequestbeforedispatchandsettlement, malformedJSON/generationrejection.
 
-Final validation: strict build plus **45 tests passed, zero failed/skipped** with the optional installed carrier enabled. Packed npm artifact installed in an isolated local consumer; built runtime/bootstrap and built JavaScript dashboard entry started, published a real URL, returned HTTP200, and stopped cleanly. Source TypeScript inside node_modules initially failed Node’s intentional stripping restriction; the build now ships JS examples under dist/examples, and the packed-artifact check passed. Tests exercise boundaries, not arbitrary plugin correctness.
+Initial validation: strict build plus **45 tests passed, zero failed/skipped** with the optional installed carrier enabled. Packed npm artifact installed in an isolated local consumer; built runtime/bootstrap and built JavaScript dashboard entry started, published a real URL, returned HTTP200, and stopped cleanly. Source TypeScript inside node_modules initially failed Node’s intentional stripping restriction; the build now ships JS examples under dist/examples, and the packed-artifact check passed. Tests exercise boundaries, not arbitrary plugin correctness.
 
 ## Explicitly not claimed
 
-No installation into personal runningDSHGUI/profile, no liveGUI screenshottest, no realsubscription/modelinference, noPython, noagent-spawnAPI, nostreamingtokensSDK, nodurableappstaterestore, nosecuritysandbox, noWindowsprocessgroupguarantee. NativeDSHsubagenttree membership isnotimplemented; programregistryanddockareseparate. Modelcalls assembledboundedtextresults; noautomatictoolloop.
+Initial implementation did not install into runningDSHGUI/profile. Subsequent user-authorized live installation and refreshed-GUI smoke are recorded in docs/local-installation.md, with46tests including actual installedHostConnectioncarrier. No realsubscription/modelinference, noPython, noagent-spawnAPI, nostreamingtokensSDK, nodurableappstaterestore, nosecuritysandbox, noWindowsprocessgroupguarantee. NativeDSHsubagenttree membership isnotimplemented; programregistryanddockareseparate. Modelcalls assembledboundedtextresults; noautomatictoolloop.
 
 The authenticated Connection host carrier's own authentication is delegated to DSH; our tests assert owner-principal checks, scoped runownership, exactgeneration andmethodargs. They do not reimplement browsercookieauth.
 

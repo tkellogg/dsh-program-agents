@@ -8,7 +8,7 @@ import { createProgramClient, type RpcTransport } from '../src/client/transport.
 // Optional read-only compatibility check against an installed DSH bundle. It
 // executes in an isolated VM with a fake carrier; no live DSH routes or secrets.
 const installedBundle = process.env.DSH_CLIENT_CONNECTION_BUNDLE;
-test('installed DSH Connection browser carrier accepts dedicated program channel and direct named args', { skip: !installedBundle }, async () => {
+test('installed DSH Connection browser carrier accepts exact API routes and direct named args', { skip: !installedBundle }, async () => {
   let factory: ((require: (name: string) => never) => { installConnection(ctx: unknown, options: unknown): void }) | undefined;
   const source = await readFile(installedBundle!, 'utf8');
   vm.runInNewContext(source, {
@@ -26,13 +26,13 @@ test('installed DSH Connection browser carrier accepts dedicated program channel
       assert.equal(init.method, 'POST');
       const envelope = JSON.parse(init.body as string);
       requests.push({ path, envelope });
-      return new Response(JSON.stringify({ type: 'server-response', rpcId: envelope.rpcId, result: { ok: true, value: envelope.method === 'list' ? { runs: [] } : undefined } }), { headers: { 'content-type': 'application/json' } });
+      return new Response(JSON.stringify({ type: 'server-response', rpcId: envelope.rpcId, result: { ok: true, value: envelope.method === 'programAgents/list' ? { runs: [] } : undefined } }), { headers: { 'content-type': 'application/json' } });
     } },
   });
   const client = createProgramClient(rpc!, 'session-live');
   assert.deepEqual(await client.list(new AbortController().signal), { runs: [], truncated: false });
-  assert.equal(requests[0]?.path, 'program-agents/list');
+  assert.equal(requests[0]?.path, 'api/programAgents/list');
   assert.equal(requests[0]?.envelope.type, 'client-request');
-  assert.equal(requests[0]?.envelope.method, 'list');
+  assert.equal(requests[0]?.envelope.method, 'programAgents/list');
   assert.deepEqual(requests[0]?.envelope.payload, { sessionId: 'session-live' });
 });
