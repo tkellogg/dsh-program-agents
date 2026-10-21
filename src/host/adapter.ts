@@ -66,6 +66,7 @@ export class DshProgramAdapter {
         if(definition.command&&!definition.args?.length)delete definition.args;
         return[name,definition];
       })),  capabilities:this.capabilities,
+      networking:config.networking,
       logDirectory:config.logDirectory??(config.auditDirectory?join(config.auditDirectory,'logs'):join(root,'logs')),
       bootstrapDirectory:fileURLToPath(new URL('../runtime/',import.meta.url)),
       bridge:{environment:(run,definition)=>this.bridge.register(run,definition).env,revoke:run=>{this.bridge.revoke(run);this.mailbox.releaseClaims({ownerId:run.ownerId,program:run.program,claimant:run.id+':'+run.generation});}},
@@ -132,6 +133,9 @@ export class DshProgramAdapter {
     const owner=this.owner(run.ownerId),o=object(input??{}),configured=this.config.programs?.[run.program];
     const access={...this.catalog.access(run.ownerId,run.program),...configured};
     const scope={ownerId:run.ownerId,program:run.program,claimant:run.id+':'+run.generation};
+    if(method==='endpoints.list'){exactKeys(o,[]);return json(this.supervisor.endpointBindings(run.id,run.ownerId));}
+    if(method==='endpoints.publish'){exactKeys(o,['id','port']);return json(this.supervisor.reportEndpoint(run.id,run.ownerId,{id:text(o.id,'endpoint id',64),port:o.port as number}));}
+    if(method==='endpoints.unpublish'){exactKeys(o,['id','port']);const id=text(o.id,'endpoint id',64);this.supervisor.unpublishEndpoint(run.id,run.ownerId,id,o.port as number|undefined);return json(this.supervisor.endpointBindings(run.id,run.ownerId).find(endpoint=>endpoint.id===id));}
     if(method==='inbox.receive'){exactKeys(o,['waitMs','leaseMs']);return json(await this.mailbox.receive(scope,o as never,signal));}
     if(method==='inbox.ack'||method==='inbox.nack'){exactKeys(o,['id','leaseToken']);return json(this.mailbox[method==='inbox.ack'?'ack':'nack'](scope,text(o.id,'id'),text(o.leaseToken,'leaseToken')));}
     if(method==='inbox.receipt'){exactKeys(o,['id']);return json(this.mailbox.receipt(scope,text(o.id,'id')));}

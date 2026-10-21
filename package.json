@@ -9,6 +9,7 @@
   "types": "./dist/host/index.d.ts",
   "exports": {
     ".": { "types": "./dist/host/index.d.ts", "default": "./dist/host/index.js" },
+    "./endpoints": { "types": "./dist/endpoints.d.ts", "default": "./dist/endpoints.js" },
     "./app": { "types": "./dist/app/index.d.ts", "default": "./dist/app/index.js" },
     "./monitoring": { "types": "./dist/monitoring/index.d.ts", "default": "./dist/monitoring/index.js" },
     "./supervision": { "types": "./dist/supervision.d.ts", "default": "./dist/supervision.js" },

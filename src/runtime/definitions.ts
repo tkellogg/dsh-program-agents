@@ -1,5 +1,6 @@
 import { isAbsolute, resolve } from 'node:path';
-import type { ProgramDefinition, ProgramResource } from '../types.js';
+import type { ProgramDefinition, ProgramEndpointDefinition, ProgramResource, ProgramUrlDefinition } from '../types.js';
+import { endpointName, normalizeEndpointPath } from '../endpoints.js';
 import { normalizeSupervision } from '../supervision.js';
 import { exactKeys, isRecord, ProgramError, RUNTIME_LIMITS, validName } from './protocol.js';
 
@@ -28,9 +29,34 @@ export function normalizeResource(input: unknown, available = false, requireType
   };
 }
 
+/** Configured recipes retain metadata without evaluating a listener or browser hostname. */
+export function definitionResource(input: ProgramUrlDefinition): ProgramResource {
+  if (input.endpoint === undefined) return normalizeResource(input);
+  return {
+    id: input.id, title: input.title, type: input.type, url: '',
+    endpoint: input.endpoint, path: input.path ?? '/',
+    ...(input.docs === undefined ? {} : { docs: input.docs }), available: false,
+  };
+}
+
+function normalizeUrlDefinition(input: unknown, endpoints: Record<string, ProgramEndpointDefinition>): ProgramUrlDefinition {
+  if (!isRecord(input) || !exactKeys(input, ['id', 'title', 'type'], ['url', 'endpoint', 'path', 'docs'])) throw new ProgramError('INVALID_INPUT', 'Invalid configured resource');
+  if (input.url !== undefined) {
+    if (Object.hasOwn(input, 'endpoint') || Object.hasOwn(input, 'path')) throw new ProgramError('INVALID_INPUT', 'Resource requires a literal URL or an endpoint recipe, not both');
+    const { available: _, ...resource } = normalizeResource(input, false, true);
+    return resource as ProgramUrlDefinition;
+  }
+  if (Object.hasOwn(input, 'url') || !validName(input.id) || typeof input.title !== 'string' || input.title.length > 256 || !['ui', 'api', 'docs'].includes(input.type as string) || !endpointName(input.endpoint) || !Object.hasOwn(endpoints, input.endpoint)) throw new ProgramError('INVALID_INPUT', 'Resource recipe must reference a configured endpoint');
+  return {
+    id: input.id, title: input.title, type: input.type as ProgramUrlDefinition['type'],
+    endpoint: input.endpoint, path: normalizeEndpointPath(input.path),
+    ...(input.docs === undefined ? {} : { docs: location(input.docs, true) }),
+  };
+}
+
 /** Definitions execute trusted code, but config/metadata still have bounded exact shapes. */
 export function normalizeDefinition(program: string, input: ProgramDefinition): ProgramDefinition {
-  if (!validName(program) || !isRecord(input) || !exactKeys(input, [], ['entry', 'command', 'name', 'description', 'urls', 'logsPath', 'cwd', 'args', 'env', 'allowedCapabilities', 'supervision'])) throw new ProgramError('INVALID_CONFIG', 'Invalid program definition');
+  if (!validName(program) || !isRecord(input) || !exactKeys(input, [], ['entry', 'command', 'name', 'description', 'urls', 'endpoints', 'logsPath', 'cwd', 'args', 'env', 'allowedCapabilities', 'supervision'])) throw new ProgramError('INVALID_CONFIG', 'Invalid program definition');
   const entry = input.entry;
   const command = input.command;
   if ((entry === undefined) === (command === undefined)) throw new ProgramError('INVALID_CONFIG', 'Program requires exactly one of entry or command');
@@ -47,12 +73,18 @@ export function normalizeDefinition(program: string, input: ProgramDefinition): 
   const reserved = new Set(['capabilities.list', 'parent.send', 'status.set', 'resources.publish', 'resources.unpublish']);
   if (input.allowedCapabilities !== undefined && (!Array.isArray(input.allowedCapabilities) || input.allowedCapabilities.length > 256 || input.allowedCapabilities.some((capability) => !validName(capability) || reserved.has(capability)))) throw new ProgramError('INVALID_CONFIG', 'Invalid capability allowlist');
   if (input.urls !== undefined && (!Array.isArray(input.urls) || input.urls.length > RUNTIME_LIMITS.resources)) throw new ProgramError('INVALID_CONFIG', 'Invalid static resource list');
-  const urls: NonNullable<ProgramDefinition['urls']> = [];
+  if (input.endpoints !== undefined && (!isRecord(input.endpoints) || Object.keys(input.endpoints).length > 16)) throw new ProgramError('INVALID_CONFIG', 'At most 16 named endpoints may be configured');
+  const endpoints: Record<string, ProgramEndpointDefinition> = {};
+  for (const [id, endpoint] of Object.entries(input.endpoints ?? {})) {
+    if (!endpointName(id) || !isRecord(endpoint) || !exactKeys(endpoint, ['port']) || (endpoint.port !== 'dynamic' && (!Number.isSafeInteger(endpoint.port) || (endpoint.port as number) < 1 || (endpoint.port as number) > 65535))) throw new ProgramError('INVALID_CONFIG', 'Endpoint requires a bounded name and dynamic or fixed port (1–65535)');
+    endpoints[id] = { port: endpoint.port as 'dynamic' | number };
+  }
+  const urls: ProgramUrlDefinition[] = [];
   try {
     for (const item of input.urls ?? []) {
-      const { available: _, ...resource } = normalizeResource(item, false, true);
+      const resource = normalizeUrlDefinition(item, endpoints);
       if (urls.some((other) => other.id === resource.id)) throw new ProgramError('INVALID_CONFIG', 'Duplicate static resource id');
-      urls.push(resource as NonNullable<ProgramDefinition['urls']>[number]);
+      urls.push(resource);
     }
   } catch (error) { throw new ProgramError('INVALID_CONFIG', error instanceof Error ? error.message : 'Invalid static resource'); }
   const cwd = resolve(input.cwd ?? process.cwd());
@@ -66,6 +98,7 @@ export function normalizeDefinition(program: string, input: ProgramDefinition): 
     env: { ...(input.env as Record<string, string> | undefined) },
     allowedCapabilities: [...new Set(input.allowedCapabilities ?? [])],
     urls,
+    ...(input.endpoints === undefined ? {} : { endpoints }),
     ...(supervision === undefined ? {} : { supervision }),
     ...(input.logsPath === undefined ? {} : { logsPath: resolve(cwd, input.logsPath) }),
   };

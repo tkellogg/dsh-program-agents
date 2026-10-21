@@ -2,7 +2,13 @@
 
 Implementation date:2026-10-19, macOS AppleSilicon Node26.12.0, pnpm12.14.0; DSH0.2.1-rc.2/Cordis4.0.5.
 
-## Current monitoring/supervision revision (2026-10-20)
+## Current endpoint recipe revision (2026-10-20)
+
+Strict build + **132/132 tests pass**, zero failed/skipped, both installed DSH carriers enabled. Adds persisted recipe XOR literal URL schemas, declared listeners and trusted networking config, actual OS bind0/listen-before-publish, fixed collision, restart while old port occupied, stale generation/environment/old-worker conditional revoke, setup abort/DNS/publish-close/same-tick error races, per-browser local/Tailscale/IPv6 resolution, malformed URL/host/path rejection, configured recipe resource collision guards, and real DOM pushed-port anchors.
+
+Live host v9 activated on existing PID11160/GUI3080 without restart or auth/model/session changes. Dynamic ordinary watched command bound port49663; after stop a separate listener held it, restart bound49680 and API returned200. Refreshed actual GUI links were49680; another restart updated both UI/API anchors to49825 through SSE with no refresh/Runtime exceptions. These ports are transient observations, not persisted settings. Final helper race hardening rebuilt and app worker reloaded; use program_list for current port. Legacy Watch demo restored. Real remote Tailscale interface/ACL/TLS not tested/configured; default bind stays loopback. Skill files and user's in-progress changes untouched.
+
+## Previous monitoring/supervision revision (2026-10-20)
 
 Strict build + **106/106 tests pass**, zero failed/skipped with both installed DSH carriers enabled. Adds actual command bridge env/revocation, loopback auth/envelope/concurrency/deadlines, durable SQLite inbox leases/ACK/NACK/correlation/receipts, exact function/MCP grant+public-tool policy, automatic stdout/file ERROR-to-parent, typed schema validation/extensions, redaction/rotation/cursors, durable error batching/dedup/backpressure/noncooperative delivery slots/bounded shutdown, fatal exception/rejection logger exit, cold parent resume/startup/archive exclusion, real bounded failure-restart and supervisor route/receipt/rate tests.
 

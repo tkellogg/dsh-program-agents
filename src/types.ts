@@ -1,4 +1,6 @@
 import type { SupervisionSettings } from './supervision.js';
+import type { EndpointNetworking, ProgramEndpointBinding, ProgramEndpointDefinition, ProgramUrlDefinition, ResolvedEndpointAddress } from './endpoints.js';
+export type { EndpointNetworking, ProgramEndpointBinding, ProgramEndpointDefinition, ProgramUrlDefinition, ResolvedEndpointAddress } from './endpoints.js';
 
 /** JSON is the only value boundary between a supervised process and its host. */
 export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
@@ -12,7 +14,9 @@ export interface ProgramDefinition {
   command?: string[];
   name?: string;
   description?: string;
-  urls?: Array<{ id: string; title: string; type: 'ui' | 'api' | 'docs'; url: string; docs?: string }>;
+  urls?: ProgramUrlDefinition[];
+  /** Named app-owned listeners; dynamic endpoints request an OS-selected port (0). */
+  endpoints?: Record<string, ProgramEndpointDefinition>;
   /** Optional descriptor for program-owned logs; supervisor capture remains separate. */
   logsPath?: string;
   cwd?: string;
@@ -29,6 +33,7 @@ export interface ProgramDescriptor {
   description: string;
   command: string[];
   urls: ProgramResource[];
+  endpoints?: Record<string, ProgramEndpointDefinition>;
   logsPath?: string;
   supervision?: SupervisionSettings;
 }
@@ -42,7 +47,13 @@ export interface ProgramLog {
 export interface ProgramResource {
   id: string;
   title: string;
+  /** Legacy literal URL, or empty for endpoint recipes (never a browser loopback fallback). */
   url: string;
+  /** Unevaluated configured endpoint recipe, retained in descriptors and terminal snapshots. */
+  endpoint?: string;
+  path?: string;
+  /** Structured public address, present only while this generation reports a binding. */
+  address?: ResolvedEndpointAddress;
   type?: 'ui' | 'api' | 'docs';
   /** Documentation HTTP(S) URL or informational absolute filesystem path. */
   docs?: string;
@@ -75,6 +86,7 @@ export interface ProgramSnapshot {
   error?: string;
   logs: ProgramLog[];
   resources: ProgramResource[];
+  endpoints?: ProgramEndpointBinding[];
   messages: ProgramMessage[];
   result?: JsonValue;
 }
@@ -131,6 +143,8 @@ export interface CapabilityRegistryLike {
 
 export interface ProgramSupervisorOptions {
   programs: Record<string, ProgramDefinition>;
+  /** Trusted harness listener/public-address policy; programs cannot override it. */
+  networking?: EndpointNetworking;
   capabilities?: CapabilityRegistryLike;
   onParentMessage?: (ownerId: string, message: JsonValue, run: ProgramSnapshot, signal: AbortSignal) => Promise<void>;
   onEvent?: (event: ProgramEvent) => void;

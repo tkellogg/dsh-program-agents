@@ -1,4 +1,5 @@
 import type { JsonValue, ProgramDefinition } from '../types.js';
+import type {EndpointNetworking} from '../endpoints.js';
 
 export interface ProgramGrant extends ProgramDefinition {
   /** Exact model routes; an empty list denies model calls. */
@@ -17,6 +18,8 @@ export interface PluginConfig {
   catalogDirectory?: string;
   logDirectory?: string;
   programs?: Record<string, ProgramGrant>;
+  /** Trusted direct-access policy. Never supplied by browser Host headers or program recipes. */
+  networking?:EndpointNetworking;
   maxRuns?: number;
   maxHistory?: number;
   startupTimeoutMs?: number;

@@ -67,6 +67,14 @@ test('actual DOM is a tiny bounded composer foldout with typed safe links and no
     assert.ok([...dom.container.querySelectorAll('button')].some(button => button.textContent === 'Copy'));
   } finally { await dom.cleanup(); }
 });
+test('endpoint recipe anchors use viewing browser hostname and pushed ports without DSH scheme/port or stale binding',async()=>{
+ const dom=setup(),previous=Object.getOwnPropertyDescriptor(globalThis,'location');Object.defineProperty(globalThis,'location',{configurable:true,value:{hostname:'workstation.tailnet.ts.net',protocol:'https:',port:'3080'}});
+ const resource={id:'ui',title:'App',type:'ui' as const,url:'',endpoint:'web',path:'/',address:{endpoint:'web',host:'browser',protocol:'http' as const,port:45123,path:'/'},available:true};const host=carrier(fullState(baseRun({resources:[resource]})));
+ try{await act(async()=>dom.root.render(h(ProgramAgentsPanel,{client:host.client})));await dom.click('Program agents');assert.equal(dom.container.querySelector('a')?.getAttribute('href'),'http://workstation.tailnet.ts.net:45123/');
+ await act(async()=>host.push(fullState(baseRun({generation:8,resources:[{...resource,address:undefined,available:false}]}))));assert.equal(dom.container.querySelector('a'),null);
+ await act(async()=>host.push(fullState(baseRun({generation:8,resources:[{...resource,address:{...resource.address,port:45234}}]}))));assert.equal(dom.container.querySelector('a')?.getAttribute('href'),'http://workstation.tailnet.ts.net:45234/');
+ }finally{await dom.cleanup();if(previous)Object.defineProperty(globalThis,'location',previous);else Reflect.deleteProperty(globalThis,'location');}
+});
 test('foldout and per-program More survive streaming generation changes; latest count deduplicates history', async () => {
   const dom = setup(), host = carrier();
   try {

@@ -4,8 +4,9 @@ import{join,resolve}from'node:path';
 import type{ProgramDefinition,ProgramSupervisor}from'../runtime/index.js';
 import{object,text,exactKeys,json}from'./validation.js';
 import{normalizeSupervision,type SupervisionSettings}from'../supervision.js';
+import type{ProgramUrlDefinition,ProgramEndpointDefinition}from'../endpoints.js';
 
-export interface Registration {name:string;description:string;command:string[];cwd?:string;urls?:Array<{id:string;title:string;type:'ui'|'api'|'docs';url:string;docs?:string}>;logsPath?:string;supervision?:SupervisionSettings}
+export interface Registration {name:string;description:string;command:string[];cwd?:string;urls?:ProgramUrlDefinition[];endpoints?:Record<string,ProgramEndpointDefinition>;logsPath?:string;supervision?:SupervisionSettings}
 export interface ProgramAccess {functions?:string[];tools?:string[];mcp?:Array<{server:string;tools:string[]}>;messaging?:boolean}
 interface Saved {ownerId:string;entries:Array<{program:string;definition:ProgramDefinition;access?:ProgramAccess}>}
 /** Durable launch descriptions only, never execution state or child credentials. */
@@ -37,7 +38,7 @@ export class ProgramCatalog {
  access(owner:string,program:string){return this.load(owner).entries.find(e=>e.program===program)?.access??{};}
  private accessValue(input:unknown):ProgramAccess{const a=object(input);exactKeys(a,['functions','tools','mcp','messaging']);const names=(value:unknown)=>{if(value===undefined)return undefined;if(!Array.isArray(value)||value.length>128||value.some(v=>typeof v!=='string'||!/^[A-Za-z][A-Za-z0-9_.:-]{0,119}$/.test(v)))throw Error('Invalid access allowlist');return value as string[];};if(a.messaging!==undefined&&typeof a.messaging!=='boolean')throw Error('Invalid messaging access');let mcp:ProgramAccess['mcp'];if(a.mcp!==undefined){if(!Array.isArray(a.mcp)||a.mcp.length>32)throw Error('Invalid MCP access');mcp=a.mcp.map(raw=>{const row=object(raw);exactKeys(row,['server','tools']);const server=text(row.server,'MCP server',32);if(!/^[A-Za-z0-9_-]+$/.test(server))throw Error('Invalid MCP server');return{server,tools:names(row.tools)??[]};});}return{...(a.functions===undefined?{}:{functions:names(a.functions)!}),...(a.tools===undefined?{}:{tools:names(a.tools)!}),...(mcp===undefined?{}:{mcp}),messaging:a.messaging===true};}
  register(owner:string,input:unknown,cwd:string){
-  const p=object(input);exactKeys(p,['name','description','command','cwd','urls','logsPath','supervision','access']);
+  const p=object(input);exactKeys(p,['name','description','command','cwd','urls','endpoints','logsPath','supervision','access']);
   const name=text(p.name,'name',120),description=text(p.description,'description',1200);
   if(!Array.isArray(p.command)||p.command.length<1||p.command.length>64||p.command.some(v=>typeof v!=='string'||v.length>8192||v.includes('\0')))throw Error('command must be an argv array (executable, arguments); no implicit shell');
   const command=p.command as string[];if(!command[0]?.trim())throw Error('Missing executable');
@@ -45,7 +46,8 @@ export class ProgramCatalog {
   const definition:ProgramDefinition={name,description,command:[...command],cwd:directory};
   if(p.supervision!==undefined)definition.supervision=normalizeSupervision(p.supervision);
   if(p.logsPath!==undefined)definition.logsPath=resolve(directory,text(p.logsPath,'logsPath',4096));
-  if(p.urls!==undefined){if(!Array.isArray(p.urls)||p.urls.length>32)throw Error('urls must be a bounded array');definition.urls=p.urls.map(raw=>{const u=object(raw);exactKeys(u,['id','title','type','url','docs']);if(!['ui','api','docs'].includes(String(u.type)))throw Error('URL type must be ui, api or docs');return{id:text(u.id,'URL id',120),title:text(u.title,'URL title',200),type:u.type as'ui'|'api'|'docs',url:text(u.url,'URL',8192),...(u.docs===undefined?{}:{docs:text(u.docs,'docs',8192)})};});}
+  if(p.endpoints!==undefined)definition.endpoints=object(p.endpoints)as unknown as Record<string,ProgramEndpointDefinition>;
+  if(p.urls!==undefined){if(!Array.isArray(p.urls)||p.urls.length>32)throw Error('urls must be a bounded array');definition.urls=p.urls.map(raw=>{const u=object(raw);exactKeys(u,['id','title','type','url','endpoint','path','docs']);if(!['ui','api','docs'].includes(String(u.type)))throw Error('URL type must be ui, api or docs');return{id:text(u.id,'URL id',120),title:text(u.title,'URL title',200),type:u.type as'ui'|'api'|'docs',...(u.url===undefined?{}:{url:text(u.url,'URL',8192)}),...(u.endpoint===undefined?{}:{endpoint:text(u.endpoint,'endpoint',64)}),...(u.path===undefined?{}:{path:text(u.path,'endpoint path',4096)}),...(u.docs===undefined?{}:{docs:text(u.docs,'docs',8192)})}as ProgramUrlDefinition;});}
   const saved=this.load(owner),program=this.prefix(owner)+createHash('sha256').update(name).digest('hex').slice(0,16);
   if(!saved.entries.some(e=>e.program===program)&&saved.entries.length>=32)throw Error('At most 32 programs per parent');
   // Runtime validates URL schemes, metadata and executable before persistence.

@@ -1,6 +1,10 @@
 # Local installation — 2026-10-19
 
-## Current supervision revision — installed 2026-10-20
+## Current endpoint recipe revision — installed 2026-10-20
+
+Active entry **program-agents-strip-v9**, host `dist/host/installed-v9.js`. Existing GUI http://127.0.0.1:3080 and Node PID11160 preserved. Added declarative `endpoints:{web:{port:"dynamic"}}`, URL endpoint/path recipes, harness bind/public host policy, app `.endpoints.listen`, per-run address publication and per-browser link resolution. Default interface remains127.0.0.1; no Tailscale/network exposure silently changed. Final build132/132 tests pass; actual GUI zero Runtime exceptions and dynamic UI/API links updated via push after restart. Live old-port collision49663→49680 verified with blocker holding old port; subsequent UI-observed restart49680→49825. Transient ports must not be hardcoded. Dynamic demo and preexisting Watch demo left running; no disposable blocker/browser processes remain. Model catalog unchanged. No skill files edited, copied, synchronized or committed during this revision; user is actively editing them. See endpoints.md.
+
+## Previous supervision revision — installed 2026-10-20
 
 Active entry **program-agents-strip-v8**, host `dist/host/installed-v8.js`. Existing GUI still http://127.0.0.1:3080 and original Node PID11160; no server restart/replacement, no auth/session/model changes. Model catalog before/after identical. Earlier v5/v6 entry cleanly disabled then replaced with fresh id/module URL to avoid ESM cache. Final browser refresh: zero Runtime exceptions; compact strip remains bottom sticky,95px expanded, pinned while long conversation scrolls to top. Existing Watch demo restored and healthy at http://127.0.0.1:4317/ after host upgrade.
 

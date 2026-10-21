@@ -2,12 +2,14 @@ import type { JsonValue } from '../types.js';
 import { assertJson, isRecord, ProgramError, validName } from '../runtime/protocol.js';
 import { createLogger, type LoggerOptions } from '../monitoring/logger.js';
 import type { InboxMessage, MessageReceipt, ReceiveOptions } from './mailbox.js';
+import { createProgramEndpoints } from './endpoints.js';
 
 export {installGlobalErrorHandlers}from'../monitoring/fatal.js';
 export { createLogger, StructuredLogger, type LoggerOptions, type LogMetadata } from '../monitoring/logger.js';
 export type { InboxMessage, MessageReceipt, ReceiveOptions } from './mailbox.js';
 export type { JsonValue } from '../types.js';
 export { ProgramError } from '../runtime/protocol.js';
+export { createProgramEndpoints, listenProgramEndpoint, type ProgramEndpoints, type ProgramEndpointBinding, type PublishEndpointOptions, type UnpublishEndpointOptions, type ListeningProgramEndpoint, type EndpointBridgeCall } from './endpoints.js';
 export interface CallOptions { signal?: AbortSignal; timeoutMs?: number }
 export interface ConnectProgramOptions {
   url?: string;
@@ -101,6 +103,7 @@ export function connectProgram(options: ConnectProgramOptions = {}) {
     generation,
     call,
     logger,
+    endpoints: createProgramEndpoints(call),
     sendSupervisor,
     supervisor: { send: sendSupervisor },
     functions: {

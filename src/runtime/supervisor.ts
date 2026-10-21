@@ -5,13 +5,28 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { StringDecoder } from 'node:string_decoder';
-import type { JsonValue, ProgramDefinition, ProgramDescriptor, ProgramSnapshot, ProgramSupervisorOptions, StartProgramOptions } from '../types.js';
+import type { EndpointNetworking, JsonValue, ProgramDefinition, ProgramDescriptor, ProgramEndpointBinding, ProgramSnapshot, ProgramSupervisorOptions, StartProgramOptions } from '../types.js';
+import { endpointName, normalizeHostname } from '../endpoints.js';
 import { CapabilityRegistry } from './registry.js';
-import { definitionCommand, normalizeDefinition, normalizeResource } from './definitions.js';
+import { definitionCommand, definitionResource, normalizeDefinition, normalizeResource } from './definitions.js';
 import { BoundedRunLog } from './log-file.js';
 import { assertJson, envelope, exactKeys, isRecord, jsonClone, matches, ProgramError, RUNTIME_LIMITS, safeError, SendQueue, validName, type Identity } from './protocol.js';
 
 const terminalStates = new Set(['completed', 'failed', 'stopped']);
+
+function normalizeNetworking(input: EndpointNetworking | undefined): Required<EndpointNetworking> {
+  try {
+    if (input !== undefined && (!isRecord(input) || !exactKeys(input, [], ['bindHost', 'publicHost', 'protocol']))) throw new Error('Invalid endpoint networking settings');
+    const normalizedBindHost = normalizeHostname(input?.bindHost === undefined ? '127.0.0.1' : input.bindHost);
+    const bindHost = normalizedBindHost.startsWith('[') ? normalizedBindHost.slice(1, -1) : normalizedBindHost;
+    if (bindHost === 'browser') throw new Error('Endpoint bindHost must be a server-local hostname');
+    const publicHost = input?.publicHost === undefined || input.publicHost === 'browser' ? 'browser' : normalizeHostname(input.publicHost);
+    if (['0.0.0.0', '[::]'].includes(publicHost)) throw new Error('Endpoint publicHost cannot be a wildcard listener address');
+    const protocol = input?.protocol === undefined ? 'http' : input.protocol;
+    if (protocol !== 'http' && protocol !== 'https') throw new Error('Endpoint protocol must be http or https');
+    return { bindHost, publicHost, protocol };
+  } catch (error) { throw new ProgramError('INVALID_CONFIG', error instanceof Error ? error.message : 'Invalid endpoint networking settings'); }
+}
 
 type Deferred<T> = { promise: Promise<T>; resolve: (value: T) => void; reject: (error: unknown) => void };
 function deferred<T>(): Deferred<T> {
@@ -66,6 +81,7 @@ export class ProgramSupervisor {
   private readonly runs = new Map<string, Run>();
   private readonly definitions = new Map<string, ProgramDefinition>();
   private readonly capabilities;
+  private readonly networking: Required<EndpointNetworking>;
   private readonly maxRuns: number;
   private readonly maxHistory: number;
   private readonly startupTimeoutMs: number;
@@ -88,6 +104,7 @@ export class ProgramSupervisor {
     this.stopTimeoutMs = this.positive(options.stopTimeoutMs ?? 1000, 'stopTimeoutMs');
     this.callTimeoutMs = this.positive(options.callTimeoutMs ?? 30_000, 'callTimeoutMs');
     this.capabilities = options.capabilities ?? new CapabilityRegistry();
+    this.networking = normalizeNetworking(options.networking);
     if (!isRecord(options.programs) || Object.keys(options.programs).length > RUNTIME_LIMITS.definitions) throw new ProgramError('INVALID_CONFIG', 'At most 256 program definitions may be configured');
     if (options.logDirectory !== undefined) {
       if (typeof options.logDirectory !== 'string' || !options.logDirectory || options.logDirectory.includes('\0')) throw new ProgramError('INVALID_CONFIG', 'Invalid log directory');
@@ -110,7 +127,8 @@ export class ProgramSupervisor {
       name: definition.name ?? program,
       description: definition.description ?? '',
       command: definitionCommand(definition),
-      urls: (definition.urls ?? []).map((resource) => normalizeResource(resource)),
+      urls: (definition.urls ?? []).map((resource) => definitionResource(resource)),
+      ...(definition.endpoints === undefined ? {} : { endpoints: structuredClone(definition.endpoints) }),
       ...(definition.logsPath === undefined ? {} : { logsPath: definition.logsPath }),
       ...(definition.supervision === undefined ? {} : { supervision: structuredClone(definition.supervision) }),
     }));
@@ -144,6 +162,56 @@ export class ProgramSupervisor {
   }
 
   get(id: string, ownerId?: string): ProgramSnapshot { return this.snapshot(this.lookup(id, ownerId)); }
+
+  /** Read this live generation's listener requests/reports; does not bind or probe ports. */
+  endpointBindings(id: string, ownerId: string): ProgramEndpointBinding[] {
+    return jsonClone(this.endpointRun(id, ownerId).snapshot.endpoints ?? []);
+  }
+
+  /** The app reports only after its own OS listener succeeds (dynamic requests use port 0). */
+  reportEndpoint(id: string, ownerId: string, report: { id: string; port: number }): ProgramEndpointBinding {
+    const run = this.endpointRun(id, ownerId);
+    if (!isRecord(report) || !exactKeys(report, ['id', 'port']) || !endpointName(report.id) || !Number.isSafeInteger(report.port) || report.port < 1 || report.port > 65535) throw new ProgramError('INVALID_INPUT', 'Endpoint report requires a configured id and a bound port (1–65535)');
+    const binding = run.snapshot.endpoints?.find((endpoint) => endpoint.id === report.id);
+    if (!binding) throw new ProgramError('UNKNOWN_ENDPOINT', 'Endpoint is not configured');
+    if (binding.requestedPort !== 0 && binding.requestedPort !== report.port) throw new ProgramError('INVALID_INPUT', 'Reported endpoint port does not match the configured fixed port');
+    binding.port = report.port;
+    for (const resource of run.snapshot.resources) {
+      if (resource.endpoint !== binding.id) continue;
+      resource.address = { endpoint: binding.id, host: binding.publicHost, protocol: binding.protocol, port: binding.port, path: resource.path ?? '/' };
+      resource.url = '';
+      resource.available = true;
+    }
+    this.changed(run);
+    return jsonClone(binding);
+  }
+
+  /** Conditional port fencing prevents an old watch worker revoking its successor. */
+  unpublishEndpoint(id: string, ownerId: string, endpointId: string, port?: number): void {
+    const run = this.endpointRun(id, ownerId);
+    if (!endpointName(endpointId) || (port !== undefined && (!Number.isSafeInteger(port) || port < 1 || port > 65535))) throw new ProgramError('INVALID_INPUT', 'Invalid endpoint id or port');
+    const binding = run.snapshot.endpoints?.find((endpoint) => endpoint.id === endpointId);
+    if (!binding) throw new ProgramError('UNKNOWN_ENDPOINT', 'Endpoint is not configured');
+    if (port !== undefined && binding.port !== port) return;
+    delete binding.port;
+    for (const resource of run.snapshot.resources) {
+      if (resource.endpoint !== binding.id) continue;
+      delete resource.address;
+      resource.url = '';
+      resource.available = false;
+    }
+    this.changed(run);
+  }
+
+  private endpointRun(id: string, ownerId: string): Run {
+    this.assertAvailable();
+    // Unlike optional get/list filters, endpoint authority always requires exact owner scope.
+    if (typeof ownerId !== 'string' || !ownerId) throw new ProgramError('NOT_FOUND', 'Program not found');
+    const run = this.lookup(id, ownerId);
+    this.assertOwner(ownerId);
+    if (!this.live(run)) throw new ProgramError('NOT_RUNNING', 'Program generation is no longer active');
+    return run;
+  }
 
   async send(id: string, ownerId: string, body: JsonValue): Promise<void> {
     this.assertAvailable();
@@ -264,7 +332,8 @@ export class ProgramSupervisor {
     snapshot.name = definition.name ?? snapshot.program;
     snapshot.description = definition.description ?? '';
     snapshot.command = definitionCommand(definition);
-    snapshot.resources = (definition.urls ?? []).map((resource) => normalizeResource(resource));
+    snapshot.resources = (definition.urls ?? []).map((resource) => definitionResource(resource));
+    if (definition.endpoints !== undefined) snapshot.endpoints = Object.entries(definition.endpoints).map(([id, endpoint]) => ({ id, bindHost: this.networking.bindHost, requestedPort: endpoint.port === 'dynamic' ? 0 : endpoint.port, publicHost: this.networking.publicHost, protocol: this.networking.protocol }));
     if (definition.logsPath !== undefined) snapshot.logsPath = definition.logsPath;
     if (definition.supervision !== undefined) snapshot.supervision = structuredClone(definition.supervision);
     return { snapshot, definition, finishing: false, input, identity: { runId: snapshot.id, generation: snapshot.generation, token: randomBytes(24).toString('hex') }, controller: new AbortController(), hello: deferred(), closed: deferred(), helloReceived: false, exitObserved: false, closeObserved: false, closeProven: false, shutdownStarted: false, calls: new Map(), lastCallId: 0, inbox: new Map(), nextInboxId: 0, protocolWindow: Date.now(), protocolCount: 0, parentWindow: Date.now(), parentCount: 0, logBytes: 0, sequence: 0, restarting: false };
@@ -294,6 +363,9 @@ export class ProgramSupervisor {
         if (!isRecord(bridgeEnv) || Object.keys(bridgeEnv).length > 16 || Object.entries(bridgeEnv).some(([key, value]) => !/^DSH_PROGRAM_[A-Z_]+$/.test(key) || typeof value !== 'string' || value.includes('\0') || value.length > 8192)) throw new ProgramError('INVALID_CONFIG', 'Invalid program bridge environment');
         Object.assign(env, bridgeEnv);
       }
+      // Runtime-owned requests overwrite stale explicit/bridge values. No address is
+      // reserved here: the app binds requestedPort (including 0) and reports it.
+      env.DSH_PROGRAM_ENDPOINTS_JSON = JSON.stringify(run.snapshot.endpoints ?? []);
       let child: ChildProcess;
       if (command) {
         child = spawn(command[0]!, command.slice(1), { cwd: run.definition.cwd, env, detached: true, shell: false, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -352,7 +424,7 @@ export class ProgramSupervisor {
     run.helloReceived = true;
     clearTimeout(run.startupTimer);
     run.snapshot.state = 'running';
-    for (const resource of run.snapshot.resources) resource.available = true;
+    for (const resource of run.snapshot.resources) resource.available = resource.endpoint === undefined || resource.address !== undefined;
     this.changed(run);
     run.hello.resolve(this.snapshot(run));
   }
@@ -493,6 +565,7 @@ export class ProgramSupervisor {
     }
     if (method === 'resources.publish') {
       const resource = normalizeResource(input, true);
+      if (run.definition.urls?.some((configured) => configured.id === resource.id && configured.endpoint !== undefined)) throw new ProgramError('FORBIDDEN', 'Configured endpoint resources are published only through their endpoint binding');
       const old = run.snapshot.resources.findIndex((other) => other.id === resource.id);
       if (old === -1 && run.snapshot.resources.length >= RUNTIME_LIMITS.resources) throw new ProgramError('LIMIT', 'Resource limit exceeded');
       if (old === -1) run.snapshot.resources.push(resource); else run.snapshot.resources[old] = resource;
@@ -501,6 +574,7 @@ export class ProgramSupervisor {
     }
     if (method === 'resources.unpublish') {
       if (!isRecord(input) || !exactKeys(input, ['id']) || !validName(input.id)) throw new ProgramError('INVALID_INPUT', 'Invalid resource id');
+      if (run.definition.urls?.some((configured) => configured.id === input.id && configured.endpoint !== undefined)) throw new ProgramError('FORBIDDEN', 'Configured endpoint resources are unpublished only through their endpoint binding');
       run.snapshot.resources = run.snapshot.resources.filter((resource) => resource.id !== input.id);
       this.changed(run);
       return null;
@@ -558,7 +632,12 @@ export class ProgramSupervisor {
     run.calls.clear();
     for (const delivery of run.inbox.values()) delivery.reject(new ProgramError('DISCONNECTED', 'Program inbox closed'));
     run.inbox.clear();
-    for (const resource of run.snapshot.resources) resource.available = false;
+    for (const binding of run.snapshot.endpoints ?? []) delete binding.port;
+    for (const resource of run.snapshot.resources) {
+      resource.available = false;
+      delete resource.address;
+      if (resource.endpoint !== undefined) resource.url = '';
+    }
   }
 
   private proveClosed(run: Run): void {
