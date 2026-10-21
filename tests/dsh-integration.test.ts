@@ -33,7 +33,7 @@ test('real Cordis + DSH ToolRuntime enforce policy and exact routes do not repla
   const fork = await root.plugin(plugin, { auditDirectory: directory, programs: { example: { entry: resolve('examples/dashboard.ts'), tools: ['fixture_read'], allowedCapabilities: ['tools.call'] } } });
   try {
     assert.ok(fork); assert.ok(root.programAgents);
-    assert.deepEqual([...routes.keys()], ['list', 'start', 'stop', 'restart', 'events'].map(method => `/api/programAgents/${method}`));
+    assert.deepEqual([...routes.keys()], ['list', 'start', 'stop', 'restart', 'models', 'modelSet', 'events'].map(method => `/api/programAgents/${method}`));
     root.tools.register(defineTool({ name: 'fixture_read', description: 'read fixture', parameters: {}, output: { schema: { type: 'string' }, render: (_a, v) => [{ type: 'text', text: v }] }, execute: async () => { calls++; return 'ok'; } }));
     const adapter = root.programAgents.adapter; adapter['owners'].set('owner', owner);
     const run: ProgramSnapshot = { id: 'fixture', generation: 1, program: 'example', ownerId: 'owner', label: 'test', state: 'running', startedAt: new Date().toISOString(), logs: [], resources: [], messages: [] };

@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { randomUUID,createHash } from 'node:crypto';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { AuditJournal } from './audit.js';
@@ -10,6 +10,9 @@ import {SupervisorRouter} from './agents.js';
 import {SupervisionPolicies} from './policies.js';
 import {ProgramOperations} from './operations.js';
 import{RequestStore}from'./requests.js';
+import{ProgramModelStore}from'./models.js';
+import{parseModelSelection,parseModelSlotId,type ModelSelection}from'../models.js';
+import{ConversationService}from'./conversations.js';
 import type{AgentTarget,RequestRecord}from'../requests.js';
 import{listTools,callTool}from'./tool-client.js';
 import type{ProgramDefinition}from'../types.js';
@@ -42,6 +45,8 @@ export class DshProgramAdapter {
   readonly bridge:AppBridgeServer;
   readonly mailbox:MessageStore;
   readonly requests:RequestStore;
+  readonly modelSlots:ProgramModelStore;
+  readonly conversations:ConversationService;
   private requestDispatches=new Map<string,AbortController>();
   readonly router:SupervisorRouter;
   readonly policies:SupervisionPolicies;
@@ -51,18 +56,25 @@ export class DshProgramAdapter {
   private servicesReady=false;
   constructor(readonly ctx: Context, readonly config: PluginConfig) {
     const root=join(process.env.DSH_HOME??join(homedir(),'.dsh'),'program-agents');
+    try{
     this.journal=new AuditJournal(config.auditDirectory??join(root,'audit'));
     this.events=new ProgramEvents(owner=>this.view(owner));
     const privateRoot=config.auditDirectory??root;
     this.mailbox=new MessageStore(join(privateRoot,'inboxes.sqlite'));
     this.requests=new RequestStore(join(privateRoot,'requests.sqlite'));
-    this.bridge=new AppBridgeServer({handler:(context,method,input,signal)=>this.appCall(context.run,method,input,signal)});
+    this.modelSlots=new ProgramModelStore(join(privateRoot,'models.sqlite'));
+    this.conversations=new ConversationService(join(privateRoot,'conversations'),{
+      parent:id=>this.resolveOwner(id),isLive:agent=>this.ctx.agents.get(agent.id)===agent,
+      withInitiator:(agent,operation)=>this.ctx.agents.withInitiator(agent,operation),
+      execute:(parent,name,args,signal)=>this.executeAgentTool(parent,name,args,signal),
+      resolveModel:(scope,model,signal)=>this.resolveModelSelection(scope.ownerId,scope.program,model,signal),
+    });
+    this.bridge=new AppBridgeServer({handler:(context,method,input,signal)=>this.appCall(context.run,method,input,signal),streamHandler:(context,method,input,signal)=>this.appStream(context.run,method,input,signal)});
     this.router=new SupervisorRouter(join(privateRoot,'supervisors'),id=>this.resolveOwner(id),(agent,name,args,signal)=>this.executeAgentTool(agent,name,args,signal));
     this.operations=new ProgramOperations(join(privateRoot,'error-outbox'),run=>this.definition(run.ownerId,run.program),async(run,body,signal)=>{await this.router.notify(run,this.definition(run.ownerId,run.program)?.supervision,json(body,65000),signal??AbortSignal.timeout(10000));});
     this.policies=new SupervisionPolicies({definition:(owner,program)=>this.definition(owner,program),entries:()=>this.catalog.entries(),eligible:owner=>this.eligible(owner),live:(owner,program)=>this.supervisor.list(owner).some(r=>r.program===program&&['starting','running','blocked','stopping'].includes(r.state)),start:async(owner,program)=>{const agent=await this.resolveOwner(owner);return this.executeAgentTool(agent,'program_start',{program},AbortSignal.timeout(120000));},restart:async run=>{const agent=await this.resolveOwner(run.ownerId);return this.executeAgentTool(agent,'program_restart',{id:run.id,generation:run.generation},AbortSignal.timeout(120000));},report:(run,error)=>{this.ctx.logger.warn('Program supervision action failed: '+String(error));this.operations.failed({...run,error:String(error)});}});
     this.capabilities.register({name:'models.call',description:'One explicit text model call using an allowed DSH route; no automatic tool loop.',handler:(input,c)=>this.model(input,c.run,c.signal)});
     this.capabilities.register({name:'tools.call',description:'Call an explicitly allowed visible DSH tool through policy. Native presentation only.',handler:(input,c)=>this.tool(input,c.run,c.signal)});
-    try{
     this.supervisor = new ProgramSupervisor({
       programs: Object.fromEntries(Object.entries(config.programs??{}).map(([name,{models,tools,mcp,messaging,maxModelOutputTokens,...definition}])=>{
         // Schemastery fills optional array fields with []; preserve entry XOR argv.
@@ -104,8 +116,15 @@ export class DshProgramAdapter {
         this.policies.changed(r);
       }
     });
-    }catch(error){this.events.dispose();this.journal.close();throw error;}
     this.catalog=new ProgramCatalog(config.catalogDirectory??(config.auditDirectory?join(config.auditDirectory,'catalog'):join(root,'catalog')),this.supervisor,new Set(Object.keys(config.programs??{})));
+    }catch(error){
+      this.disposePartial();throw error;
+    }
+  }
+  private disposePartial(){
+    this.disposed=true;this.policies?.dispose();this.events?.dispose();
+    void this.operations?.dispose().catch(()=>{});void this.supervisor?.dispose().catch(()=>{});void this.bridge?.dispose().catch(()=>{});
+    this.conversations?.dispose();this.modelSlots?.close();this.requests?.close();this.mailbox?.close();this.journal?.close();
   }
   definition(ownerId:string,program:string):ProgramDefinition|undefined{return this.catalog?.definition(ownerId,program)??this.config.programs?.[program];}
   eligible(ownerId:string){
@@ -137,6 +156,10 @@ export class DshProgramAdapter {
     const owner=this.owner(run.ownerId),o=object(input??{}),configured=this.config.programs?.[run.program];
     const access={...this.catalog.access(run.ownerId,run.program),...configured};
     const scope={ownerId:run.ownerId,program:run.program,claimant:run.id+':'+run.generation};
+    if(method==='models.declare'){exactKeys(o,['slots']);const result=this.modelSlots.declare(scope,o.slots as never);this.events.changed(run.ownerId);return json(result);}
+    if(method==='models.list'){exactKeys(o,[]);return json(this.modelSlots.list(scope));}
+    if(method==='models.resolve'){exactKeys(o,['slot']);return json(this.modelSlots.resolve(scope,parseModelSlotId(o.slot)));}
+    if(method.startsWith('conversations.')){if(!access.messaging)throw Error('Conversation access requires messaging grant');return this.conversations.call(scope,method,input,signal);}
     if(method==='endpoints.list'){exactKeys(o,[]);return json(this.supervisor.endpointBindings(run.id,run.ownerId));}
     if(method==='endpoints.publish'){exactKeys(o,['id','port']);return json(this.supervisor.reportEndpoint(run.id,run.ownerId,{id:text(o.id,'endpoint id',64),port:o.port as number}));}
     if(method==='endpoints.unpublish'){exactKeys(o,['id','port']);const id=text(o.id,'endpoint id',64);this.supervisor.unpublishEndpoint(run.id,run.ownerId,id,o.port as number|undefined);return json(this.supervisor.endpointBindings(run.id,run.ownerId).find(endpoint=>endpoint.id===id));}
@@ -173,6 +196,31 @@ export class DshProgramAdapter {
     if(method==='models.call')return this.model(input,run,signal);
     const capability=this.capabilities.get(method);if(capability&&this.definition(run.ownerId,run.program)?.allowedCapabilities?.includes(method))return capability.handler(input,{run,signal});
     throw Error('Unknown or ungranted app method');
+  }
+  private async* appStream(run:ProgramSnapshot,method:string,input:JsonValue,signal:AbortSignal):AsyncIterable<JsonValue>{
+    const live=this.supervisor.get(run.id,run.ownerId);if(live.generation!==run.generation||!['starting','running','blocked'].includes(live.state))throw Error('Run authority revoked');
+    this.owner(run.ownerId);const access={...this.catalog.access(run.ownerId,run.program),...this.config.programs?.[run.program]};if(!access.messaging)throw Error('Conversation access requires messaging grant');
+    if(!['conversations.events','conversations.ask'].includes(method))throw Error('Unknown stream method');
+    yield* this.conversations.stream({ownerId:run.ownerId,program:run.program},method,input,signal);
+  }
+  async modelConfiguration(ownerId:string,program:string){
+    if(!this.catalog.visible(ownerId,program))throw Error('Program not visible to this Session');
+    const service=this.ctx.get('sessionController')as any;if(!service?.modelCatalog)throw Error('Model catalog unavailable');
+    const catalog=await service.modelCatalog();return{slots:this.modelSlots.list({ownerId,program}),catalog};
+  }
+  async setModelConfiguration(ownerId:string,program:string,slot:string,selection:unknown,revision:number,signal:AbortSignal){
+    if(!this.catalog.visible(ownerId,program))throw Error('Program not visible to this Session');
+    let chosen:ModelSelection|undefined;
+    if(selection!==null&&selection!==undefined){const candidate=parseModelSelection(selection);const service=this.ctx.get('sessionController')as any;if(!service?.modelCatalog)throw Error('Model catalog unavailable');const catalog=await service.modelCatalog();signal.throwIfAborted();const model=catalog.groups?.find((g:any)=>g.id===candidate.provider)?.models?.find((m:any)=>m.id===candidate.model);if(!model)throw Error('Model is not currently available in the DSH catalog');if(candidate.reasoningEffort!==undefined&&!model.reasoning?.efforts?.some((e:any)=>e.id===candidate.reasoningEffort))throw Error('Reasoning effort not supported by this model');chosen=candidate;}
+    signal.throwIfAborted();const result=this.modelSlots.set({ownerId,program},slot,chosen,revision);this.events.changed(ownerId);return result;
+  }
+  private async resolveModelSelection(ownerId:string,program:string,model:ModelSelection|string,signal:AbortSignal):Promise<ModelSelection>{
+    const selection=typeof model==='string'?this.modelSlots.resolve({ownerId,program},model):parseModelSelection(model);
+    const owner=this.owner(ownerId);signal.throwIfAborted();const llm=owner.ctx.llm;
+    // The native adapter resolves opaque model ids/default efforts and rejects
+    // unavailable routes without changing parent/global model settings.
+    if(typeof llm.resolveCallConfig==='function')await llm.resolveCallConfig({provider:selection.provider,model:selection.model,...selection.reasoningEffort===undefined?{}:{reasoningEffort:ReasoningEffortId(selection.reasoningEffort)}},signal);
+    signal.throwIfAborted();return selection;
   }
   private requestView(record:RequestRecord|null):JsonValue{
     if(!record)return null;return json({requestId:record.id,status:record.status,createdAt:record.createdAt,deadline:record.deadline,...record.agentId===undefined?{}:{agentId:record.agentId},...record.response===undefined?{}:{response:record.response},...record.error===undefined?{}:{error:record.error}},57344);
@@ -213,9 +261,9 @@ export class DshProgramAdapter {
     if(!this.catalog.visible(parentId,program))throw Error('Program not registered for this parent');
     return this.mailbox.send({ownerId:parentId,program},{from:String(sender.id),body,...correlationId?{correlationId}:{}});
   }
-  async dispose(){if(this.disposed)return;this.disposed=true;this.policies.dispose();this.events.dispose();for(const controller of this.requestDispatches.values())controller.abort(new Error('Program adapter disposed'));await this.operations.dispose();await this.supervisor.dispose();await this.bridge.dispose();this.mailbox.close();this.requests.close();this.journal.close();}
+  async dispose(){if(this.disposed)return;this.disposed=true;this.policies.dispose();this.events.dispose();for(const controller of this.requestDispatches.values())controller.abort(new Error('Program adapter disposed'));await this.operations.dispose();await this.supervisor.dispose();await this.bridge.dispose();this.mailbox.close();this.requests.close();this.modelSlots.close();await this.conversations.dispose();this.journal.close();}
   view(ownerId:string){
-    const programs=this.catalog.list(ownerId);
+    const programs=this.catalog.list(ownerId).map(program=>{const slots=this.modelSlots.list({ownerId,program:program.program});return{...program,hasModelSlots:slots.length>0,modelRevision:createHash('sha256').update(JSON.stringify(slots.map(s=>[s.id,s.revision]))).digest('hex')};});
     // Browser synchronization needs launch metadata/state, never chat or log payloads.
     const runs=this.supervisor.list(ownerId).map(({logs,messages,result,...run})=>({...run,logs:[],messages:[]}));
     return{runs,programs};
@@ -273,20 +321,24 @@ export class DshProgramAdapter {
     this.journal.append({type:'effect',ownerId:run.ownerId,runId:run.id,generation:run.generation,effectId,operation,phase,detail});
   }
   private async model(input:JsonValue,run:ProgramSnapshot,signal:AbortSignal):Promise<JsonValue>{
-    const o=object(input);exactKeys(o,['provider','model','prompt','system','maxTokens','reasoningEffort']);
-    const provider=text(o.provider,'provider'),model=text(o.model,'model');const grant=this.config.programs?.[run.program];
-    if(!grant?.models?.some(r=>r.provider===provider&&r.model===model))throw new Error('Model route not granted');
-    const prompt=text(o.prompt,'prompt',49152);const maxTokens=o.maxTokens??Math.min(4096,grant.maxModelOutputTokens??4096);
-    if(!Number.isSafeInteger(maxTokens)||Number(maxTokens)<1||Number(maxTokens)>(grant.maxModelOutputTokens??16384))throw new Error('Invalid model output cap');
+    const o=object(input);exactKeys(o,['slot','provider','model','prompt','system','maxTokens','reasoningEffort']);
+    if(o.slot!==undefined&&(o.provider!==undefined||o.model!==undefined||o.reasoningEffort!==undefined))throw Error('Supply a model slot or an explicit route, not both');
+    const selected=o.slot===undefined?parseModelSelection({provider:text(o.provider,'provider'),model:text(o.model,'model'),...o.reasoningEffort===undefined?{}:{reasoningEffort:text(o.reasoningEffort,'reasoningEffort')}}):this.modelSlots.resolve({ownerId:run.ownerId,program:run.program},parseModelSlotId(o.slot));
+    const {provider,model}=selected,grant=this.config.programs?.[run.program];
+    // Slots are user preferences, not an exclusive allowlist. Explicit routes
+    // retain normal native adapter availability/credentials and parent policy.
+    const prompt=text(o.prompt,'prompt',49152);const maxTokens=o.maxTokens??Math.min(4096,grant?.maxModelOutputTokens??4096);
+    if(!Number.isSafeInteger(maxTokens)||Number(maxTokens)<1||Number(maxTokens)>(grant?.maxModelOutputTokens??16384))throw new Error('Invalid model output cap');
     const owner=this.owner(run.ownerId),effectId=randomUUID();
     const messages=[...(o.system===undefined?[]:[createSystemMessage(text(o.system,'system',65536))]),{role:'user' as const,content:[{type:'text' as const,text:prompt}]}];
-    const config=await owner.ctx.llm.prepareCall({provider,model,maxTokens:Number(maxTokens),...(o.reasoningEffort===undefined?{}:{reasoningEffort:ReasoningEffortId(text(o.reasoningEffort,'reasoningEffort'))})},signal);
+    const prepared=await owner.ctx.llm.prepareCall({provider,model,maxTokens:Number(maxTokens),...(selected.reasoningEffort===undefined?{}:{reasoningEffort:ReasoningEffortId(selected.reasoningEffort)})},signal);
+    const config=prepared.config;
     this.audit(run,effectId,'models.call','started',json({config,messages},1048576));
     const assembly=new BlockAssembler();let bytes=0;const outputController=new AbortController();
     const callSignal=AbortSignal.any([signal,outputController.signal]);
     try{
       await this.ctx.agents.withInitiator(owner,async()=>{
-        for await(const chunk of owner.ctx.llm.stream({...config,provider,model,messages,signal:callSignal})){
+        for await(const chunk of prepared.stream({...config,messages,signal:callSignal})){
           bytes+=Buffer.byteLength(JSON.stringify(chunk));if(bytes>49152){outputController.abort();throw new Error('Model response exceeds program IPC budget');}
           assembly.push(chunk);
         }

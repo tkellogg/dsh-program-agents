@@ -2,7 +2,7 @@ import type { JsonValue, ProgramDefinition } from '../types.js';
 import type {EndpointNetworking} from '../endpoints.js';
 
 export interface ProgramGrant extends ProgramDefinition {
-  /** Exact model routes; an empty list denies model calls. */
+  /** @deprecated Legacy metadata only; model calls now use available native adapter routes and optional named slots. */
   models?: Array<{provider: string; model: string}>;
   /** Exact visible DSH tool names; empty denies tool execution. */
   tools?: string[];

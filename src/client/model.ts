@@ -10,6 +10,8 @@ export interface ProgramDescriptor {
   command: string[];
   urls: ProgramResource[];
   logsPath?: string;
+  hasModelSlots?:boolean;
+  modelRevision?:string;
 }
 export interface ProgramRun {
   id: string;
@@ -121,7 +123,7 @@ export function parseRunList(value: unknown, sessionId: string): RunList {
     if (!record(raw)) throw new Error('Invalid program descriptor.');
     const program = requiredString(raw.program, 'program');
     if (keys.has(program)) continue;
-    programs.push({ program, name: boundedText(raw.name, 200) || program, description: boundedText(raw.description), command: command(raw.command), urls: resources(raw.urls), ...(typeof raw.logsPath === 'string' ? { logsPath: boundedText(raw.logsPath, 8_192) } : {}) });
+    programs.push({ program, name: boundedText(raw.name, 200) || program, description: boundedText(raw.description), command: command(raw.command), urls: resources(raw.urls),...(raw.hasModelSlots===true?{hasModelSlots:true,modelRevision:boundedText(raw.modelRevision,2000)}:{}), ...(typeof raw.logsPath === 'string' ? { logsPath: boundedText(raw.logsPath, 8_192) } : {}) });
     keys.add(program);
   }
   const latest = new Map<string, ProgramRun>();

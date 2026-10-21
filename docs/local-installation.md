@@ -1,6 +1,16 @@
 # Local installation — 2026-10-19
 
-## Current tools-only revision — installed 2026-10-21
+## Current models and native conversations revision — installed 2026-10-21
+
+Active entry **program-agents-strip-v13**, host `dist/host/installed-v13.js` (v12 was the intermediate UI smoke revision). Existing GUI http://127.0.0.1:3080, original Node PID11160, parent/global model catalog and unrelated profile configuration preserved. Only one program plugin enabled/active. Existing Dynamic/Watch demos restored; Model preferences demo is available/running with smart-model=Sol/xhigh and cheap-local=Qwen3.8-27B. It declares settings only, not startup inference.
+
+**225/225 tests pass**, plus strict copyable React/Hono reference typecheck. Real browser model widgets show purpose descriptions and native catalog choices; selecting local Qwen for smart-model persisted revision2, resetting restored Sol/xhigh revision3, and state survived plugin replacement. Final browser repeat also passed with zero runtime errors. Direct model calls are tested against the actual native LlmRuntime prepared-call interface (mock provider, no external API); explicit native routes remain callable independent of named preferences.
+
+A real installed app opened a native continuable DSH child using the inherited route, subscribed before its queued prompt, received85 frames (snapshot+receipt+25durableevents+58assistant-stream frames), ended on its own turn rather than the initialization turn, and verified SIDEBAR_OK in paginated native history. Selected child-route request was correctly rejected when this exact parent's native subagent tool did not advertise model-selection arguments; no policy bypass or global model mutation. Temporary verification app completed and its persisted launch entry was removed. Child Session remains normal native history, not an independently running service.
+
+Skill includes named model guide plus a five-file copyable React sidebar/Hono backend reference. Browser bundle has no runtime SDK/Node/bridge credentials. Context is allowlisted/bounded and appended only with new user turns; stable system/history prefixes are not rewritten. Native stream reconnection is a fresh snapshot, not promised token replay. Existing conversation routes/personas are immutable; preference changes affect new conversations and future direct slot calls. Async stream cleanup/backpressure/startup teardown regressions are included. No core DSH patches, replacement server or implicit network exposure.
+
+## Previous tools-only revision — installed 2026-10-21
 
 Active entry **program-agents-strip-v11**, host `dist/host/installed-v11.js`. Removed the custom registry, app/service aliases, bridge routes, grant types and configuration field. No renamed replacement registry: discovery/calls now use only the exact parent's existing DSH tool runtime and connected MCP tools. Legacy removed grants are rejected rather than silently promoted to broader tool authority. Skill/docs now describe the native tool integration only; user UI-pattern guidance remains untouched.
 

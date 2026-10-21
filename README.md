@@ -20,6 +20,12 @@ Standard JSONL `ERROR` logs from stdout/stderr or registered logsPath are automa
 
 `program_register` accepts optional `supervision` (restart never/on-failure/always, bounded budget/backoff, startAtStartup, supervisor route, error buffering) and exact `access` grants. Defaults preserve manual process control. Startup resolves existing parent Sessions and never starts archived Sessions; archival participates in activity admission/stop. See `docs/supervision.md` and `skills/program-agents/inboxes.md`.
 
+## Model preferences and native conversations
+
+`dsh.models.declare` gives named slots (for example smart-model=Sol/xhigh and cheap-local=Qwen3.8-27B) a default route and purpose description. The program's **Models** button in the existing DSH composer lets the user edit/reset durable per-program preferences, without altering the parent chat/global model. Slot calls resolve the latest choice; explicit provider/model calls still use any available native adapter route. See [model slots](skills/program-agents/models.md).
+
+`dsh.conversations.open` creates a real continuable DSH subagent—not a second tool/LLM loop. Handles expose native history, send, ask event streams, long-lived events and interrupt. Streaming carries native snapshots, durable events and assistant token/tool frames; reconnect starts a fresh snapshot rather than pretending transient chunks are durable replay. Routes/instructions are fixed at creation; existing conversations are not silently reset by slot edits. [Copyable React sidebar + backend](skills/program-agents/chat-sidebar.md) includes an allowlisted page-state context appended only with new user turns for stable prompt-prefix cache eligibility.
+
 ## Default workflow
 
 1. Build an app using a foreground **watch/reload** command.
@@ -103,7 +109,7 @@ export default async function main(ctx: ProgramContext) {
 
 `ctx.parent.send` remains a bounded internal coordination primitive. Parent processes it automatically; user need not relay/acknowledge messages. INFO/DEBUG/status updates don't wake the LLM; standard ERROR logs and synthetic process failures are buffered into the configured supervisor automatically. Normal stop/completion does not inject a chat notice.
 
-Named `allowedCapabilities`, exact `models:[{provider,model}]` and `tools:[name]` grants are trusted host config. Dynamic commands can request exact persisted access allowlists; they don't gain broad subscriptions/tools, and parent public tool policy still applies. `models.call` is one bounded assembled text call (not token streaming/tool loop); `tools.call` traverses the live parent's public policy with fresh identity, no expired tool token. Third-party host plugins can register JSON handlers via `ctx.programAgents.capabilities.register(...)`; validate inputs, honor cancellation, return JSON. No automatic effect retries.
+Named `allowedCapabilities` and exact `tools:[name]` grants are trusted host config. Model calls use any available native adapter route (or user-controlled named slot); legacy configured `models` metadata is no longer an exclusive route allowlist. Dynamic commands can request exact persisted access allowlists; they don't gain broad subscriptions/tools, and parent public tool policy still applies. `models.call` is one bounded assembled text call (not token streaming/tool loop); `tools.call` traverses the live parent's public policy with fresh identity, no expired tool token. Third-party host plugins can register JSON handlers via `ctx.programAgents.capabilities.register(...)`; validate inputs, honor cancellation, return JSON. No automatic effect retries.
 
 ## Lifecycle, privacy and limits
 

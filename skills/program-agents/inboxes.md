@@ -107,7 +107,7 @@ These names/parameter/result shapes mirror the official JS MCP Client's **tool s
 
 This is not a full `Client` transport implementation: no MCP initialize/stdio/http server, resources/prompts/tasks/sampling/elicitation/cache/notifications are promised. `_meta` is accepted as metadata but not forwarded as arbitrary parent tool authority. DSH native content is adapted to MCP text/structured JSON; canonical upstream MCP content is preserved when DSH retained it. Large/image results still have the bridge64KiB boundary.
 
-Apps use `tools.listTools/callTool` to access only existing DSH tools registered through the normal DSH tool API and connected MCP tools. Grant exact `access.tools` names or server-scoped `access.mcp` tools. Model inference remains explicit `dsh.models.call({provider,model,prompt,...})` with trusted route grants; not a tool loop or token-stream API.
+Apps use `tools.listTools/callTool` to access only existing DSH tools registered through the normal DSH tool API and connected MCP tools. Grant exact `access.tools` names or server-scoped `access.mcp` tools. Model inference accepts a [named configurable slot](models.md) or an explicit native route with `dsh.models.call({slot,prompt,...})` / `{provider,model,prompt,...}`; direct inference remains unary, not a tool loop. For actual native Agent conversations with history/token/tool events and a copyable React UI, use [conversations and the sidebar reference](chat-sidebar.md).
 
 ## Permissions and supervisor route
 

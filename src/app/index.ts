@@ -6,6 +6,11 @@ import { createProgramEndpoints } from './endpoints.js';
 import{createProgramInbox}from'./inbox.js';
 import{createProgramAgents}from'./agents.js';
 import{createProgramTools}from'./tools.js';
+import{createProgramModels}from'./models.js';
+import{createProgramConversations}from'./conversations.js';
+import{createProgramStream}from'./stream.js';
+export*from'./models.js';
+export*from'./conversations.js';
 export*from'./inbox.js';
 export*from'./agents.js';
 export*from'./tools.js';
@@ -116,7 +121,8 @@ export function connectProgram(options: ConnectProgramOptions = {}) {
       list: (callOptions?: CallOptions) => call<McpToolInfo[]>('mcp.list', null, callOptions),
       call: <T = JsonValue>(server: string, tool: string, args: JsonValue = null, callOptions?: CallOptions) => call<T>('mcp.call', { server, tool, args }, callOptions),
     },
-    models: { call: <T = JsonValue>(input: JsonValue, callOptions?: CallOptions) => call<T>('models.call', input, callOptions) },
+    models:createProgramModels(call),
+    conversations:createProgramConversations(call,createProgramStream(url,token)),
     tools,
     inbox:createProgramInbox(call),
   };

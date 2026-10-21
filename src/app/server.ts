@@ -2,10 +2,12 @@ import { randomBytes } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { JsonValue, ProgramDefinition, ProgramSnapshot } from '../types.js';
 import { assertJson, exactKeys, isRecord, jsonClone, ProgramError, safeError, validName } from '../runtime/protocol.js';
+import{writeProgramStream}from'./stream-server.js';
 
 export interface AppBridgeContext { run: ProgramSnapshot; definition: ProgramDefinition }
 export interface AppBridgeServerOptions {
   handler(context: AppBridgeContext, method: string, input: JsonValue, signal: AbortSignal): Promise<JsonValue>;
+  streamHandler?(context:AppBridgeContext,method:string,input:JsonValue,signal:AbortSignal):AsyncIterable<JsonValue>;
   /** Hard ceilings are 32 outstanding handlers and 120 seconds. */
   maxOutstanding?: number;
   timeoutMs?: number;
@@ -91,7 +93,8 @@ export class AppBridgeServer {
     const disconnect = () => controller?.abort(new ProgramError('CANCELLED', 'Caller disconnected; effect outcome may be unknown'));
     try {
       if (this.disposed) throw new ProgramError('UNAVAILABLE', 'Bridge is closed');
-      if (request.method !== 'POST' || request.url !== '/call') { this.reply(response, 404, { ok: false, error: { code: 'NOT_FOUND', message: 'Unknown bridge route' } }); return; }
+      const streaming=request.url==='/stream'&&!!this.options.streamHandler;
+      if (request.method !== 'POST' || request.url !== '/call'&&!streaming) { this.reply(response, 404, { ok: false, error: { code: 'NOT_FOUND', message: 'Unknown bridge route' } }); return; }
       // Browser origins/cookies are not bridge credentials. No CORS or ambient auth.
       if (request.headers.origin !== undefined || request.headers['sec-fetch-site'] !== undefined || request.headers.host !== new URL(this.address!).host) throw new ProgramError('FORBIDDEN', 'Bridge accepts direct loopback clients only');
       const authorization = request.headers.authorization;
@@ -111,6 +114,14 @@ export class AppBridgeServer {
       if (controller.signal.aborted) throw controller.signal.reason;
       const activeRegistration = registration;
       const activeController = controller;
+      if(streaming){
+        // Each connection is finite; reconnect reopens a native snapshot. Stops and
+        // old-generation revocations use the same controller as unary calls.
+        if(timer)clearTimeout(timer);timer=setTimeout(()=>activeController.abort(new ProgramError('STREAM_RECONNECT','Refresh conversation stream snapshot')),120000);
+        const source=this.options.streamHandler!({run:jsonClone(activeRegistration.run),definition:structuredClone(activeRegistration.definition)},input.method as string,input.input as JsonValue,activeController.signal);
+        handlerStarted=true;try{await writeProgramStream(response,source,activeController);}finally{this.outstanding--;}
+        return;
+      }
       const pending = Promise.resolve().then(() => this.options.handler({ run: jsonClone(activeRegistration.run), definition: structuredClone(activeRegistration.definition) }, input.method as string, input.input as JsonValue, activeController.signal));
       handlerStarted = true;
       // The slot survives timeout/disconnection until the actual host handler settles.

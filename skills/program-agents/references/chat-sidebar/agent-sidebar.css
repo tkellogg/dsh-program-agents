@@ -1,0 +1,37 @@
+.agent-sidebar {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  width: min(100%, 26rem);
+  height: min(52rem, 90dvh);
+  min-height: 22rem;
+  color: #17212d;
+  background: #fbfcfe;
+  border: 1px solid #cbd5e1;
+  border-radius: .65rem;
+  font: 14px/1.5 system-ui, sans-serif;
+  overflow: hidden;
+}
+.agent-sidebar *, .agent-sidebar *::before, .agent-sidebar *::after { box-sizing: border-box; }
+.agent-sidebar header { display: flex; align-items: center; justify-content: space-between; padding: .8rem 1rem; border-bottom: 1px solid #dbe3ed; }
+.agent-sidebar h2 { margin: 0; font-size: 1rem; }
+.agent-sidebar__status { font-size: .8rem; color: #475569; }
+.agent-sidebar__controls { display: flex; flex-wrap: wrap; gap: .5rem; padding: .6rem 1rem; }
+.agent-sidebar__controls label { font-size: .75rem; width: 100%; }
+.agent-sidebar button { padding: .4rem .65rem; color: inherit; background: #eef2f7; border: 1px solid #bcc9da; border-radius: .35rem; cursor: pointer; font: inherit; }
+.agent-sidebar button:disabled { opacity: .55; cursor: default; }
+.agent-sidebar button:focus-visible, .agent-sidebar textarea:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+.agent-sidebar__error { margin: .3rem 1rem; padding: .65rem; color: #7f1d1d; background: #fff1f2; border: 1px solid #fecdd3; border-radius: .3rem; }
+.agent-sidebar__feed { flex: 1; min-height: 8rem; padding: .6rem 1rem; overflow-y: auto; overscroll-behavior: contain; }
+.agent-sidebar__row { margin: .65rem 0; padding: .7rem; border-radius: .4rem; background: #eef2f7; overflow-wrap: anywhere; }
+.agent-sidebar__row--user { background: #e5efff; }
+.agent-sidebar__row--tool { background: #edf5ed; }
+.agent-sidebar__row--status { color: #526174; background: transparent; font-size: .8rem; padding: .2rem; }
+.agent-sidebar__row > strong { text-transform: capitalize; font-size: .75rem; }
+.agent-sidebar p { margin: .35rem 0; white-space: pre-wrap; }
+.agent-sidebar pre { white-space: pre-wrap; overflow-wrap: anywhere; font: .8rem/1.4 ui-monospace, monospace; }
+.agent-sidebar summary { cursor: pointer; }
+.agent-sidebar form { padding: .75rem 1rem; display: grid; gap: .4rem; border-top: 1px solid #dbe3ed; }
+.agent-sidebar textarea { width: 100%; resize: vertical; font: inherit; color: inherit; background: white; border: 1px solid #a8b8ce; border-radius: .3rem; padding: .5rem; }
+.agent-sidebar small { color: #526174; overflow-wrap: anywhere; font-size: .72rem; }
+@media (max-width: 600px) { .agent-sidebar { width: 100%; height: 75dvh; } }

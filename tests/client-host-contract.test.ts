@@ -10,7 +10,7 @@ test('client and host start in exact parent public tool context; scoped SSE and 
  ctx.provide('connection',{fetch:{register(route:Route){routes.set(route.path,route);return async()=>{routes.delete(route.path);};}}});
  const fiber=await ctx.plugin(host,{auditDirectory:directory,programs:{worker:{command:[process.execPath,'-e','setInterval(()=>{},1000)'],name:'Worker',description:'Example worker'}}});
  try{
-  assert.deepEqual([...routes.keys()],['list','start','stop','restart','events'].map(m=>'/api/programAgents/'+m));
+  assert.deepEqual([...routes.keys()],['list','start','stop','restart','models','modelSet','events'].map(m=>'/api/programAgents/'+m));
   const a=ctx.programAgents.adapter;a['owners'].set('session-a',agent);a.supervisor.list=owner=>owner==='session-a'?[{...snapshot}]:[];a.supervisor.get=(id,owner)=>{if(id!=='p1'||owner!=='session-a')throw Error('not found');return{...snapshot};};
   a.supervisor.stop=async()=>{effects.push('stop');return{...snapshot,state:'stopped'};};a.supervisor.restart=async()=>{effects.push('restart');return{...snapshot,generation:3};};
   let count=0;const signal=new AbortController().signal;

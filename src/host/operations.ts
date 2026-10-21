@@ -31,6 +31,6 @@ export class ProgramOperations {
   const record=parseLogLine(JSON.stringify({timestamp:new Date().toISOString(),level:'ERROR',log_type:'dsh.program.error.v1',message:run.error??'Program process failed',event_id:`process-${run.id}-${run.generation}`,error:{name:'ProgramExit',message:run.error??'Program process failed'},data:{unhandled:true,run_id:run.id,generation:run.generation,logs_path:run.logsPath??null}}));
   if(record)this.buffer(run).add(record,{path:run.logsPath,run:{id:run.id,generation:run.generation}});
  }
- terminal(run:ProgramSnapshot){for(const key of this.partial.keys())if(key.startsWith(run.id+':'))this.partial.delete(key);void this.buffer(run).flush().catch(()=>{});}
+ terminal(run:ProgramSnapshot){if(this.stopped)return;for(const key of this.partial.keys())if(key.startsWith(run.id+':'))this.partial.delete(key);void this.buffer(run).flush().catch(()=>{});}
  async dispose(){this.stopped=true;for(const tail of this.tails.values())await tail.close();this.tails.clear();for(const buffer of this.buffers.values())await buffer.close();this.buffers.clear();this.partial.clear();}
 }

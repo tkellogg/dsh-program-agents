@@ -141,6 +141,13 @@ test('Session switch remounts dock, aborts previous stream and prevents owner co
     await dom.click('Program agents'); assert.ok(dom.container.textContent?.includes('Other session'));
   } finally { await dom.cleanup(); }
 });
+test('declared model slots expose per-program configuration without changing parent model selection',async()=>{
+ const dom=setup(),host=carrier({runs:[],programs:[{...descriptor,hasModelSlots:true,modelRevision:'smart-model:1'}]});
+ const slot={id:'smart-model',description:'Judgment for difficult reviews',default:{provider:'codex',model:'sol',reasoningEffort:'xhigh'},selection:{provider:'codex',model:'sol',reasoningEffort:'xhigh'},overridden:false,revision:1};let selected:any;
+ host.client.modelConfiguration=async()=>({slots:[slot],catalog:{default:slot.selection,routableProviders:['codex'],groups:[{id:'codex',name:'ChatGPT',models:[{id:'sol',name:'Sol',reasoning:{efforts:[{id:'xhigh',name:'Extra high'}]}}]}],failures:[]}});
+ host.client.setModel=async(program,id,selection,revision)=>{selected={program,id,selection,revision};return slot;};
+ try{await act(async()=>dom.root.render(h(ProgramAgentsPanel,{client:host.client})));await dom.click('Program agents');await dom.click('Models');assert.ok(dom.container.textContent?.includes('Judgment for difficult reviews'));assert.ok(dom.container.querySelector('select[aria-label="Model for smart-model"]'));assert.ok(dom.container.querySelector('select[aria-label="Reasoning for smart-model"]'));await dom.click('Save');assert.deepEqual(selected,{program:'opaque-program-key',id:'smart-model',selection:slot.selection,revision:1});assert.equal(host.calls.some(c=>c.endpoint.includes('selectModel')),false);}finally{await dom.cleanup();}
+});
 test('plugin retains strict Session composer dock registration using actual public connection RPC', () => {
   let declared = '', registered: { name: string; id: string; inject(sessionId: string): { programClient: unknown } } | undefined, component: unknown;
   apply({ connection: { rpc: { async call() { return { ok: true, value: { runs: [] } }; } } }, slots: {

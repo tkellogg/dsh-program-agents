@@ -52,10 +52,12 @@ export function apply(ctx:Context,config:PluginConfig={}){
     const handler=async(endpoint:string,payload:unknown,signal:AbortSignal)=>{
       try{
         signal.throwIfAborted();
-        if(!['list','start','stop','restart'].includes(endpoint))throw Error('Unknown program endpoint');
-        const p=object(payload);exactKeys(p,endpoint==='list'?['sessionId']:endpoint==='start'?['sessionId','program']:['sessionId','id','generation']);
+        if(!['list','start','stop','restart','models','modelSet'].includes(endpoint))throw Error('Unknown program endpoint');
+        const p=object(payload);exactKeys(p,endpoint==='list'?['sessionId']:['start','models'].includes(endpoint)?['sessionId','program']:endpoint==='modelSet'?['sessionId','program','slot','selection','revision']:['sessionId','id','generation']);
         const owner=text(p.sessionId,'sessionId');
         if(endpoint==='list')return{ok:true,value:a.view(owner)};
+         if(endpoint==='models')return{ok:true,value:await a.modelConfiguration(owner,text(p.program,'program'))};
+         if(endpoint==='modelSet')return{ok:true,value:await a.setModelConfiguration(owner,text(p.program,'program'),text(p.slot,'slot'),p.selection,Number(p.revision),signal)};
         if(endpoint==='start')return{ok:true,value:await a.startFromUi(owner,text(p.program,'program'),signal)};
         // Existing runs retain their captured live parent; the browser cannot choose
         // a different Agent or supply commands/environment to these controls.
@@ -63,7 +65,7 @@ export function apply(ctx:Context,config:PluginConfig={}){
         return{ok:true,value:await a.controlFromUi(agent,endpoint as 'stop'|'restart',{id,generation:Number(p.generation)},signal)};
       }catch(error){return{ok:false,error:{code:'program-agents/rejected',message:error instanceof Error?error.message:'Program operation failed',details:{}}};}
     };
-    for(const method of ['list','start','stop','restart'])c.effect(()=>connection.fetch.register({path:`/api/programAgents/${method}`,methods:['POST'],requestBody:'buffered',fetch:programFetch(method,handler)}));
+    for(const method of ['list','start','stop','restart','models','modelSet'])c.effect(()=>connection.fetch.register({path:`/api/programAgents/${method}`,methods:['POST'],requestBody:'buffered',fetch:programFetch(method,handler)}));
     c.effect(()=>connection.fetch.register({path:'/api/programAgents/events',methods:['POST'],requestBody:'buffered',fetch:request=>a.events.fetch(request)}));
     a.journal.append({kind:'web-routes-registered',prefix:'/api/programAgents',updates:'SSE'});
   });

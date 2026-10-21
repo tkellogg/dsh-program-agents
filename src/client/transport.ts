@@ -1,3 +1,4 @@
+import type{ModelSlotView,ModelSelection}from'../models.js';
 import { CLIENT_LIMITS, parseRunList, type ProgramAction, type ProgramItem, type ProgramRun, type RunList } from './model.js';
 
 /** Public structural face of DSH ClientConnectionRpc; supplied by ctx.connection. */
@@ -8,11 +9,15 @@ export interface RpcTransport {
   >;
 }
 export type StreamingFetch = (input: URL, init: RequestInit) => Promise<Response>;
+export interface ProgramModelCatalog{default:ModelSelection;routableProviders:readonly string[];groups:readonly{id:string;name:string;models:readonly{id:string;name:string;description?:string;reasoning?:{efforts:readonly{id:string;name:string}[];defaultEffort?:string}}[]}[];failures:readonly{id:string;name:string;message:string}[]}
+export interface ProgramModelConfiguration{slots:ModelSlotView[];catalog:ProgramModelCatalog}
 export interface ProgramClient {
   readonly sessionId: string;
   list(signal: AbortSignal): Promise<RunList>;
   subscribe(snapshot: (value: RunList) => void, signal: AbortSignal): Promise<void>;
   action(action: ProgramAction, target: ProgramItem | ProgramRun, signal: AbortSignal): Promise<void>;
+  modelConfiguration?(program:string,signal:AbortSignal):Promise<ProgramModelConfiguration>;
+  setModel?(program:string,slot:string,selection:ModelSelection|null,revision:number,signal:AbortSignal):Promise<ModelSlotView>;
 }
 export class ProgramApiError extends Error {
   readonly code: string;
@@ -100,6 +105,8 @@ export function createProgramClient(connection: { rpc: RpcTransport } | RpcTrans
   };
   return {
     sessionId,
+    async modelConfiguration(program,signal){return await call('models',{sessionId,program},signal)as ProgramModelConfiguration;},
+    async setModel(program,slot,selection,revision,signal){return await call('modelSet',{sessionId,program,slot,selection,revision},signal)as ModelSlotView;},
     async list(signal) { return parseRunList(await call('list', { sessionId }, signal), sessionId); },
     async subscribe(snapshot, signal) {
       const url = new URL('api/programAgents/events', document.baseURI);

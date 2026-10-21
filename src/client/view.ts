@@ -2,6 +2,7 @@ import { createElement as h, useEffect, useMemo, useState, useSyncExternalStore,
 import { actionKey, createPanelController, type PanelController, type ProgramPanelState } from './controller.js';
 import { resourceLink, runControls, safeResourceUrl, type ProgramAction, type ProgramItem } from './model.js';
 import type { ProgramClient } from './transport.js';
+import{ProgramModels}from'./models.js';
 
 // The conversation.input.dock lives inside DSH's bottom-anchored composer seat.
 // Stay in that layout flow: no global selectors, fixed positioning or overlay.
@@ -18,11 +19,12 @@ const errorStyle: CSSProperties = { color: 'var(--dsw-alias-state-error-primary,
 function button(label: string, disabled: boolean, onClick: () => void, extra: Record<string, unknown> = {}) {
   return h('button', { type: 'button', style: { ...buttonStyle, opacity: disabled ? 0.5 : 1 }, disabled, onClick, ...extra }, label);
 }
-function ProgramRow({ item, state, controller }: { item: ProgramItem; state: ProgramPanelState; controller: PanelController }) {
+function ProgramRow({ item, state, controller,client }: { item: ProgramItem; state: ProgramPanelState; controller: PanelController;client:ProgramClient }) {
   const key = actionKey(item), pending = state.pending[key];
   const status = item.run?.state ?? 'configured';
   const controls = runControls(status, Boolean(pending), state.stale);
   const [more, setMore] = useState(false);
+  const[models,setModels]=useState(false);
   const [copied, setCopied] = useState('');
   const localDocs = [...new Set(item.urls.flatMap(resource => [
     ...(resource.docs && !safeResourceUrl(resource.docs) ? [resource.docs] : []),
@@ -52,9 +54,11 @@ function ProgramRow({ item, state, controller }: { item: ProgramItem; state: Pro
       (status === 'configured' || ['stopped', 'completed', 'failed'].includes(status)) ? button(pending === 'start' ? 'Starting…' : 'Start', !controls.start, () => perform('start')) : null,
       status !== 'configured' && !['stopped', 'completed', 'failed'].includes(status) ? button(pending === 'stop' ? 'Stopping…' : 'Stop', !controls.stop, () => perform('stop')) : null,
       status !== 'configured' ? button(pending === 'restart' ? 'Restarting…' : 'Restart', !controls.restart, () => perform('restart')) : null,
+      item.hasModelSlots&&client.modelConfiguration&&client.setModel?button('Models',state.stale,()=>setModels(!models),{'aria-expanded':models,'aria-label':`Configure models for ${item.name}`}):null,
       hasMore ? button('More', false, () => setMore(!more), { 'aria-expanded': more, 'aria-label': `More about ${item.name}`, style: { ...buttonStyle, border: 0, padding: '2px 0', ...mutedStyle } }) : null,
     ),
     (state.actionErrors[key] || item.run?.error) ? h('p', { role: 'alert', style: errorStyle }, state.actionErrors[key] || item.run?.error) : null,
+    models&&item.hasModelSlots?h(ProgramModels,{client,program:item.program,revision:item.modelRevision}):null,
     more ? h('div', { 'aria-label': `${item.name} details`, style: { ...mutedStyle, marginTop: 5, overflowWrap: 'anywhere' } },
       item.description ? h('div', null, item.description) : null,
       item.command.length ? h('div', null, h('code', null, item.command.join(' '))) : null,
@@ -83,7 +87,7 @@ export function ProgramAgentsPanel({ client, reconnectDelayMs }: { client: Progr
     open ? h('div', { 'data-program-foldout': true, style: { maxHeight: 'min(240px, 35vh)', overflowY: 'auto', overscrollBehavior: 'contain' } },
       !state.items.length && !state.loading ? h('div', { style: { padding: '5px 9px', ...mutedStyle } }, 'No programs configured.') : null,
       state.truncated ? h('div', { style: { padding: '3px 9px', ...mutedStyle } }, 'Showing the most recent programs.') : null,
-      ...state.items.map(item => h(ProgramRow, { key: item.program, item, state, controller })),
+      ...state.items.map(item => h(ProgramRow, { key: item.program, item, state, controller,client })),
     ) : null,
   );
 }

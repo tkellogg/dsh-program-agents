@@ -1,0 +1,10 @@
+{
+  "extends":"./tsconfig.json",
+  "compilerOptions":{
+    "rootDir":".",
+    "noEmit":true,
+    "jsx":"react-jsx"
+  },
+  "include":["skills/program-agents/references/chat-sidebar/**/*.ts","skills/program-agents/references/chat-sidebar/**/*.tsx"],
+  "exclude":["node_modules","dist"]
+}
