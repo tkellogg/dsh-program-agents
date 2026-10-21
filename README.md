@@ -10,7 +10,7 @@ Experimental0.2 implementation for DSH0.2.1-rc.2; Node22.18+ on macOS/Linux. Loc
 
 Persist listener recipes such as `endpoints:{web:{port:"dynamic"}}` and URLs `{id:"ui",title:"Open",type:"ui",endpoint:"web",path:"/"}` instead of a previously evaluated hostname/port. `connectProgram().endpoints.listen('web',server)` binds the harness interface with OS-assigned port0, reports the actual listener, and updates links. Each browser uses its own DSH hostname by default (not DSH's port); an explicit harness public hostname/protocol can override it. Restart re-evaluates endpoints, even when the old port is taken. Absolute legacy URLs remain supported.
 
-Direct Tailscale access requires a reachable harness `networking.bindHost`, matching `publicHost` policy and ACL/firewall access to app ports; defaults stay loopback, never silently bind all interfaces. No DSH same-origin proxy or implicit TLS. See [endpoint configuration and lifecycle](docs/endpoints.md).
+Direct Tailscale access requires a reachable harness `networking.bindHost`, matching `publicHost` policy and ACL/firewall access to app ports; defaults stay loopback, never silently bind all interfaces. No DSH same-origin proxy or implicit TLS. See [endpoint configuration and lifecycle](skills/program-agents/endpoints.md).
 
 ## Monitoring, app bridge and supervision
 

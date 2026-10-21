@@ -18,6 +18,8 @@ Uses for program agents (these are suggestions, don't limit yourself to them, bu
 3. **Apps** — Agents are great for highly complex use cases. Sometimes the user just needs a very simple and repeatable use case. For these, build an app with a regular backend; maybe a CRUD app. Wire in messaging to agents to handle errors or handle bulk user input.
 4. **Optimization loops** — setup a loop to optimize code or business processes. Setup a subagent to the program agent to handle making changes, and create a dashboard to show progress to the user and let the user participate more in optimization.
 
+If you're deciding what to build, please read [ui-patterns](ui-patterns.md).
+
 Program agents are fundamentally a way to use agents in a more high leverage way. Focus LLMs on the control plane instead of the
 data plane. Another way to think about it is, "personal SaaS where the agent is the Ops team & development team combined".
 
@@ -29,21 +31,31 @@ You (the agent) should know:
 2. What the user was doing. Capture enough in the logs to figure out what the user was doing when things broke. Also carefully track interactions with external services. The usual — anything that can be unpredictable should be tracked carefully. Keep metrics, counts, latencies, etc. Generally keep these as DEBUG messages.
 3. What external services were doing. Keep metrics, counts, latencies, etc. Generally keep these as DEBUG messages.
 
-Also, when logging, try to use some sort of operation ID to associate all events within an operation, across and within web requests. Always funnel all logs to a single log file, `./logs/app-log.jsonl`, that's automatically rolled on a regular cadence. Also include JSON structured telemetry that can be parsed. It's wise to setup some sort of tooling to read logs and dashboard out latencies and operational events in a form that agents can make sense of (scripts are typically fine, dashboard UIs if the user needs it). In some cases it may be appropriate to export to DuckDB.
+Also, when logging, try to an [operation ID](log-format.md) to associate all events within an operation, across and within web requests. Always funnel all logs to a single log file, `./logs/app-log.jsonl`, that's automatically rolled on a regular cadence. Also include JSON structured telemetry that can be parsed. It's wise to setup some sort of tooling to read logs and dashboard out latencies and operational events in a form that agents can make sense of (scripts are typically fine, dashboard UIs if the user needs it). In some cases it may be appropriate to export to DuckDB.
+
+### Responding to errors
+Read [inboxes.md](inboxes.md) to understand the techical details. The simplest way to respond to errors is to log an ERROR line, but you can also use the client-side library. Also, unhandled errors should bubble up to the agent, so throwing an exception is a perfectly adequate response.
+
+When writing code, you may come across a situation which is strange and might need further diagnosis. Write code that explicitly sends a message to an agent.
+
+## Who to send a message to?
+
+1. **Parent agent** — Generally the right choice. However, it does clog the agent's inbox so don't do this if the user also needs to interact with the parent agent. Designate a child!
+2. **Designated child agent** — Use the [client library](inboxes.md) to send a message to a child agent. You'll create a name/ID for this agent such that all traffic goes to the same agent every time.
+3. **New child agent** — Alternately, instead of designating a single agent to handle all operational issues, you may consider launching off multiple agents to handle incidents. This may be important if latency is key, as a new agent won't ever have to wait for another message to finish.
+
 
 ## Integration references
 
+- Read [endpoints.md](endpoints.md) before publishing app URLs: persist endpoint/path recipes, bind and report an OS-assigned port through `connectProgram().endpoints.listen`, and let the harness/browser supply reachable hostnames. Includes restart collisions, remote/Tailscale access, bind policy and security caveats.
 - Read [inboxes.md](inboxes.md) for the app-side library, supervisor messaging, Functions/MCP, adjacent Agent lookup/messaging, inboxes and explicit processing receipts. ERROR logs automatically reach the configured supervisor; semantic app workflows can contact it for intelligence as well.
 - Read [log-format.md](log-format.md) for the versioned JSONL standard, extensible `log_type` schemas, structured logger, buffering, redaction and rotation.
 - `program_register` accepts optional `supervision` (restart policy/budget/backoff, startAtStartup, supervisor route, error buffering) and explicit `access` grants. Defaults do not auto-restart/start. Startup runs only for existing, unarchived parent Sessions.
 
-## Responding to errors
-
-
 ## Recommended stack
 
 - **TypeScript**, Node22.18+ (Node26 on this Mac), ESM; pnpm with a committed lockfile.
-- **Hono + @hono/node-server** for a small typed HTTP app/API; **Zod** for external data validation. Bind local apps to `127.0.0.1` by default. Use a stable development port, handle port-in-use clearly, and never silently kill another service.
+- **Hono + @hono/node-server** for a small typed HTTP app/API; **Zod** for external data validation. Use harness-supplied listener settings and prefer OS-assigned dynamic ports with [endpoint recipes](endpoints.md), not a hardcoded hostname/port. Bind local apps to `127.0.0.1` by default; remote exposure requires deliberate harness configuration. Never silently kill another service holding a fixed port.
 - **Vite + React** for a genuinely interactive UI; use plain server-rendered HTML for simple dashboards. Keep the frontend/API on a consistent origin or explicitly document dev proxying. Publish a UI URL the user can actually open.
 - **SQLite** for transactional application state (Node's `node:sqlite` when appropriate, migrations, WAL, parameterized queries). It is the default for mutable single-user apps/queues/idempotency keys. Do not use a JSON file as a concurrent database.
 - **DuckDB** for analytics, columnar/CSV/Parquet exploration and batch reporting, not the default hot transactional service database. Prefer the supported Node `@duckdb/node-api` binding if needed. Avoid multiple uncoordinated writers and do not introduce PostgreSQL/Docker for a tiny local app without a reason.
@@ -59,7 +71,8 @@ Register a program with:
 - `description`: one sentence about what it does.
 - `command`: **argv array**, executable then arguments; no implicit shell. Use an absolute executable path if PATH ambiguity matters. Use `['pnpm','run','dev']`, not a shell string with `cd`, `&`, redirects or interpolated user data. A program is trusted code; review before launch.
 - `cwd`: app's working directory (relative paths resolve from the current parent working directory).
-- `urls`: array of `{id,title,type:'ui'|'api'|'docs',url,docs?}`. Usually0–1 UI URL. `ui` is for the user, `api` for agents/tools, `docs` for discovering usage. **An API should also have documentation:** a docs URL or absolute local README/OpenAPI path. `docs` can point to that URL/path. Filesystem docs are informational paths for file tools, not file:// web links. Never put auth tokens in URLs.
+- `endpoints`: named listeners, usually `{"web":{"port":"dynamic"}}`. The app must consume harness settings and report its actual bound port; `connectProgram().endpoints.listen('web', server)` does both. Do not persist a previous run's evaluated port or browser hostname.
+- `urls`: prefer `{id,title,type:'ui'|'api'|'docs',endpoint:'web',path:'/api',docs?}` for app-owned listeners. An endpoint/path recipe is mutually exclusive with literal `url`; absolute HTTP(S) URLs and informational documentation paths remain supported. Usually0–1 UI URL. `ui` is for the user, `api` for agents/tools, `docs` for discovering usage. **An API should also have documentation:** a docs URL, a docs resource on the same endpoint, or an absolute local README/OpenAPI path. Filesystem docs are informational paths for file tools, not file:// web links. Never put auth tokens in URLs. See [endpoints.md](endpoints.md).
 - `logsPath`: optional existing log file or directory owned by the app. If omitted the supervisor captures bounded stdout/stderr to an actual private file and returns its path in the run. Use file tools or `tail` to inspect; do not paste log floods into chat.
 
 Example tool argument:
@@ -70,13 +83,16 @@ Example tool argument:
   "description": "Local inventory editor and stock-level API.",
   "command": ["pnpm", "run", "dev"],
   "cwd": "/absolute/path/inventory",
+  "endpoints": {"web":{"port":"dynamic"}},
   "urls": [
-    {"id":"app","title":"Open inventory","type":"ui","url":"http://127.0.0.1:5173/"},
-    {"id":"api","title":"Inventory API","type":"api","url":"http://127.0.0.1:3000/api","docs":"/absolute/path/inventory/docs/api.md"},
+    {"id":"app","title":"Open inventory","type":"ui","endpoint":"web","path":"/"},
+    {"id":"api","title":"Inventory API","type":"api","endpoint":"web","path":"/api","docs":"/absolute/path/inventory/docs/api.md"},
     {"id":"docs","title":"API docs","type":"docs","url":"/absolute/path/inventory/docs/api.md"}
   ]
 }
 ```
+
+For this example, bind the app's server with `await connectProgram().endpoints.listen('web', server)`; registration metadata alone cannot change a hardcoded listener. The harness supplies bind interface/protocol and defaults public links to the viewing browser's hostname. Dynamic ports are selected afresh at bind time; remote/Tailscale access still needs reachable interfaces and ACLs. Do not silently widen exposure or assume the DSH page's HTTPS gives the app TLS. Read [endpoints.md](endpoints.md) for the full contract.
 
 Call `program_register`; its returned `program` is the opaque launch key. Then `program_start({program})` or let the user press Start. Registering does not execute code. Re-register the same name to update the description/launch command; restart when the command itself changes. Ordinary source edits should be picked up by the watcher; don't keep asking the user to restart.
 
@@ -86,7 +102,7 @@ Launch descriptions survive DSH/plugin restart on this machine; running executio
 
 1. Create the app, install only needed dependencies, add a reproducible `dev` command and brief README/API docs.
 2. Register metadata and a watch/reload command. Run migrations/backups explicitly before side-effectful changes.
-3. Start it. `program_start` returns on process connection/spawn, **not application readiness**. Verify the published UI/API health using the actual URL and inspect logs; don't claim a working app from a spawned PID alone.
+3. Start it. `program_start` returns on process connection/spawn, **not application readiness**. Endpoint links stay unavailable until the app binds and reports its actual port. Verify UI/API health using the current binding and inspect logs; don't claim a working app from a spawned PID alone. Browser-facing hostnames may differ from server-local health addresses—see [endpoints.md](endpoints.md).
 4. `program_list` returns descriptions and current runs, typed links, generation and log paths. Stop/restart controls require exact id+generation; stale controls must not mutate newer runs.
 5. Use UI URL for the user; use API URL+docs for automation. Prefer typed structured API calls to scraping a dashboard. Never automatically fetch arbitrary linked resources under DSH's origin.
 6. If the SDK program notifies its parent, handle it as background context and continue work. Do not ask the user to relay messages, open a message pane or acknowledge IPC. Notify the user only for a genuine decision, permission, completion or actionable problem.
