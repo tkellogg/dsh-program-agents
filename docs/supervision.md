@@ -15,8 +15,7 @@
   "errors": {"enabled":true,"bufferMs":1000,"maxBatch":20,"cooldownMs":30000}
  },
  "access": {
-  "functions":["inventory.lookup"],
-  "tools":["working_directory"],
+  "tools":["working_directory","inventory.lookup"],
   "mcp":[{"server":"inventory","tools":["lookup"]}],
   "messaging":true
  }
@@ -45,15 +44,21 @@ import {connectProgram} from '@tkellogg/dsh-program-agents/app';
 const program=connectProgram({logger:{logsPath:'./logs',stdout:true,private:true}});
 program.logger.info('ready',{}, {log_type:'com.example.app.ready.v1'});
 await program.supervisor.send({type:'work-ready',count:3},{correlationId:'batch-42'});
-const item=await program.inbox.receive({waitMs:25000,leaseMs:60000});
-if(item){await processIdempotently(item.id,item.body);await program.inbox.ack(item);}
+await program.inbox.receive({waitMs:25000,leaseMs:60000},async(item,{signal})=>{
+  await processIdempotently(item.id,item.body,{signal}); // library renews/ACKs/NACKs
+});
+const text=await program.agents.ask({name:'Reviewer'},{type:'review'}); // string response
+const {tools}=await program.tools.listTools();
+const result=await program.tools.callTool({name:'inventory.lookup',arguments:{sku:'A1'}});
 ```
 
 Per-run/generation bearer credentials are injected into supervised command and SDK processes, inherited by watcher workers, and revoked on stop/crash/restart. Bridge is a separate loopback127 ephemeral HTTP endpoint, not a replacement GUI server. Browser origin/ambient cookies are not admitted; Host, body, header, concurrency and deadlines bounded. Calls include no caller-selected owner/run identity. Cancellation/revocation doesn't promise external effects were rolled back. Native trusted code is still not a sandbox.
 
-Methods: functions.list/call, mcp.list/call(server,tool,args), agents.list/get/send, supervisor.send/sendSupervisor, inbox.receive/ack/nack/receipt, tools.call, models.call. Function registry `ctx.programAgents.functions.register({name,description,inputSchema?,handler})` supplies trusted JSON handlers. Host function names, MCP tools and visible native tools require exact grants; MCP reuses existing `mcp__server__tool` credentials/policy. Agent messaging requires explicit grant and only sees parent + its real direct-child catalog. SDK named capabilities remain supported.
+Preferred methods: tools.listTools/callTool (official MCP tool parameter/result shapes), mcp.forServer(server).listTools/callTool, agents.list/get/send/ask/request/cancel, supervisor.send/sendSupervisor, managed inbox.receive(options,handler), models.call. Host JSON tool registry `ctx.programAgents.appTools.register({name,description,inputSchema?,handler})` is exposed through the unified tool client and access.tools grants. `functions` and old tools.call/mcp.list/call remain deprecated compatibility aliases, not a separate learning/functions subsystem. MCP/native tools keep exact grants and normal parent visibility/policy. Agent messaging requires explicit messaging grant and sees only parent + direct children; send/ask support explicit named get-or-create or fresh child selection under the normal parent delegation tool. SDK named capabilities remain supported.
 
-Inbox SQLite contains accepted/claimed/acked messages; namespace owner+program survives worker/host restart. Lease token + current authoritative claimant run/generation are mandatory for ACK/NACK. Claims expire or release on revoke. At-least-once delivery requires app idempotency; ACK is not a distributed transaction. Poll receive bounds30s, lease5min, queue/receipts/bytes bounded. Retained receipt state is not eternal.
+`agents.ask` defaults to a string response or accepts strict Draft2020-12 responseSchema / typed responseType helper. Requests live in private requests.sqlite; assignment precedes dispatch, one valid reply is atomically accepted through program_reply, and conflicting/late/wrong-Agent replies reject. No guaranteed Agent liveness or automatic message/delegation retry. Stable requestId keys deduplicate only within retained storage; changed inputs reject. Result reads/cancel expose known/unknown outcomes and survive host restart without redispatch.
+
+Inbox SQLite contains accepted/claimed/acked messages; namespace owner+program survives worker/host restart. Lease token + current authoritative claimant run/generation are mandatory for ACK/NACK. Claims expire or release on revoke. Managed receive renews leases, awaits handlers and owns ACK/NACK; lost ACKs raise SettlementUnknownError without unsafe retries. Cancellation aborts handler signal but cannot force noncooperative JS to stop; slots remain retained until actual settlement, renewal stops at the bounded processing deadline, and expired work can redeliver. At-least-once delivery requires app idempotency; ACK is not a distributed transaction. Poll receive bounds30s, lease5min, queue/receipts/bytes bounded. Retained receipt state is not eternal.
 
 Read the skill's [inbox guide](../skills/program-agents/inboxes.md) for examples and use cases. `examples/inbox-worker.ts` is a real no-IPC ordinary command example; build ships dist/examples/inbox-worker.js. `docs/log-format.md` and schemas define structured logger/error pipeline.
 

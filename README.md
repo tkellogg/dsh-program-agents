@@ -14,7 +14,7 @@ Direct Tailscale access requires a reachable harness `networking.bindHost`, matc
 
 ## Monitoring, app bridge and supervision
 
-New: `@tkellogg/dsh-program-agents/app` works with ordinary watched commands. `connectProgram()` exposes supervisor messaging, granted Functions/MCP/tools/models, adjacent Agent lookup/messaging, and durable SQLite inbox receive/lease/ACK/NACK/receipt. No special entrypoint required.
+New: `@tkellogg/dsh-program-agents/app` works with ordinary watched commands. `connectProgram()` exposes supervisor messaging, MCP-shaped `tools.listTools/callTool`, permitted models, managed `inbox.receive(options,async handler)` with lease renewal/ACK/NACK, and durable typed `agents.ask`. Both Agent send/ask support named get-or-create or explicit fresh child selection under the parent's normal policy. The old `functions` surface is a deprecated host-tool alias, not a separate continual-learning system. No special entrypoint required.
 
 Standard JSONL `ERROR` logs from stdout/stderr or registered logsPath are automatically deduplicated/buffered into the configured parent, reusable supervisor child, or fresh child. Versioned `log_type` identifies stable extensible monitoring schemas; see `docs/log-format.md` and shipped `schemas/`. Structured logger supports operation IDs, rotation, private files and secret-key redaction.
 

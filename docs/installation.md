@@ -26,7 +26,7 @@ Configuration has `auditDirectory`, `maxRuns`, `maxHistory`, `startupTimeoutMs`,
 
 Implemented: real Node process lifecycle, explicit restart/generation revocation, parent/inbox JSON, unary text model calls/usage/finish, native DSH tool policy dispatch, named capability extensions, status/logs, HTTP(S) resource links, session-scoped web controls, bounded private audit journal.
 
-Also implemented: opt-in bounded restart/startup/archive admission, configured supervisor children through normal delegation, standard JSONL monitoring, app functions/MCP/adjacent-agent bridge and durable inbox receipts. Deferred: token streaming SDK, unrestricted program-spawned children, native program-as-LLM-subagent-tree membership, Python, iframe dashboard embedding, automatic proxy/tunnels, arbitrary app-state restore/external-effect replay, external persistent agent services. These are deliberately not represented by fake working APIs.
+Also implemented: opt-in bounded restart/startup/archive admission, configured supervisor children through normal delegation, standard JSONL monitoring, MCP-shaped tool discovery/calls, managed inbox settlement with fenced lease renewal, durable schema-validated agents.ask responses, and policy-scoped implicit child creation for Agent send/ask. Deferred: token streaming SDK, unrestricted program-spawned children, native program-as-LLM-subagent-tree membership, Python, iframe dashboard embedding, automatic proxy/tunnels, arbitrary app-state restore/external-effect replay, external persistent agent services. These are deliberately not represented by fake working APIs.
 
 ## Recovery
 

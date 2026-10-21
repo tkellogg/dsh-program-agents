@@ -1,6 +1,14 @@
 # Local installation — 2026-10-19
 
-## Current endpoint recipe revision — installed 2026-10-20
+## Current managed API revision — installed 2026-10-21
+
+Active entry **program-agents-strip-v10**, host `dist/host/installed-v10.js`. Plugin-only upgrade in the existing GUI http://127.0.0.1:3080; original Node PID11160 and unrelated profile/model settings preserved. Public provider metadata unchanged. Exactly one enabled/active program plugin. Existing Dynamic/Watch demos restored; disposable managed inbox smoke process stopped and its launch description removed.
+
+**176/176 tests pass**, including installed DSH HostConnection/browser carriers. Managed receive owns asynchronous callback lifetime, lease heartbeats and settlement; real installed command smoke was received and ACKed once in private SQLite. Durable ask first-response/schema/idempotency/cancellation/ambiguity and implicit child creation are exercised with the real adapter/store and mocked delegation (no synthetic paid inference). Official MCP schemas validate discovery/calls/results; no external MCP server was invoked. Additional review regressions cover cancellation during delayed target lookup, over64 historical children, nested response framing and scalar tool results. `functions` is deprecated compatibility, not a learning subsystem.
+
+Refreshed actual GUI in owned headless Chrome: zero Runtime exceptions, bottom-sticky compact panel, pushed dynamic URL updates across restart. Skill logging/API guidance synchronized to canonical SKILL/inboxes after concurrent-edit guards. User use-case/routing sections preserved; UI-patterns content not edited or synchronized. No browser/model credentials committed.
+
+## Previous endpoint recipe revision — installed 2026-10-20
 
 Active entry **program-agents-strip-v9**, host `dist/host/installed-v9.js`. Existing GUI http://127.0.0.1:3080 and Node PID11160 preserved. Added declarative `endpoints:{web:{port:"dynamic"}}`, URL endpoint/path recipes, harness bind/public host policy, app `.endpoints.listen`, per-run address publication and per-browser link resolution. Default interface remains127.0.0.1; no Tailscale/network exposure silently changed. Final build132/132 tests pass; actual GUI zero Runtime exceptions and dynamic UI/API links updated via push after restart. Live old-port collision49663→49680 verified with blocker holding old port; subsequent UI-observed restart49680→49825. Transient ports must not be hardcoded. Dynamic demo and preexisting Watch demo left running; no disposable blocker/browser processes remain. Model catalog unchanged. No skill files edited, copied, synchronized or committed during this revision; user is actively editing them. See [the endpoint skill guide](../skills/program-agents/endpoints.md).
 

@@ -44,8 +44,9 @@ export class MessageStore {
   private closed = false;
 
   constructor(path: string, options: MessageStoreOptions = {}) {
-    this.maxPending = options.maxPendingPerProgram ?? 1000;
-    this.maxMessages = options.maxMessages ?? 10_000;
+    if (!options || typeof options !== 'object' || Array.isArray(options) || options.clock !== undefined && typeof options.clock !== 'function') throw new ProgramError('INVALID_CONFIG', 'Invalid message store options');
+    this.maxPending = options.maxPendingPerProgram === undefined ? 1000 : options.maxPendingPerProgram;
+    this.maxMessages = options.maxMessages === undefined ? 10_000 : options.maxMessages;
     this.clock = options.clock ?? Date.now;
     if (!Number.isSafeInteger(this.maxPending) || this.maxPending < 1 || this.maxPending > 10_000 || !Number.isSafeInteger(this.maxMessages) || this.maxMessages < this.maxPending || this.maxMessages > 100_000) throw new ProgramError('INVALID_CONFIG', 'Invalid message store limits');
     if (path !== ':memory:') {
@@ -68,7 +69,7 @@ export class MessageStore {
 
   send(scope: MessageScope, message: { from: string; body: JsonValue; correlationId?: string }): MessageReceipt {
     this.checkScope(scope);
-    if (typeof message.from !== 'string' || !message.from || message.from.length > 1024 || message.correlationId !== undefined && (typeof message.correlationId !== 'string' || message.correlationId.length > 256)) throw new ProgramError('INVALID_INPUT', 'Invalid message metadata');
+    if (!message || typeof message !== 'object' || Array.isArray(message) || typeof message.from !== 'string' || !message.from || message.from.length > 1024 || message.correlationId !== undefined && (typeof message.correlationId !== 'string' || message.correlationId.length > 256)) throw new ProgramError('INVALID_INPUT', 'Invalid message metadata');
     assertJson(message.body);
     // Reserve framing space for id, receipt timestamps, and the opaque claim token.
     // Never accept durable work that cannot later cross the bounded bridge.
@@ -88,8 +89,9 @@ export class MessageStore {
 
   async receive(scope: MessageScope, options: ReceiveOptions = {}, signal?: AbortSignal): Promise<InboxMessage | null> {
     this.checkScope(scope);
-    const waitMs = this.bound(options.waitMs ?? 0, 'waitMs', 0, 30_000);
-    const leaseMs = this.bound(options.leaseMs ?? 30_000, 'leaseMs', 1, 300_000);
+    if (!options || typeof options !== 'object' || Array.isArray(options)) throw new ProgramError('INVALID_INPUT', 'Invalid receive options');
+    const waitMs = this.bound(options.waitMs === undefined ? 0 : options.waitMs, 'waitMs', 0, 30_000);
+    const leaseMs = this.bound(options.leaseMs === undefined ? 60_000 : options.leaseMs, 'leaseMs', 1, 300_000);
     const deadline = Date.now() + waitMs;
     do {
       if (signal?.aborted) throw new ProgramError('CANCELLED', 'Inbox receive was cancelled');
@@ -108,6 +110,17 @@ export class MessageStore {
     } while (true);
   }
 
+  /** Extend only an unexpired claim belonging to this exact run and token. Never resurrect a lease. */
+  renew(scope: MessageScope, id: string, leaseToken: string, leaseMs: number): MessageReceipt {
+    this.bound(leaseMs, 'leaseMs', 1, 300_000);
+    return this.transaction(() => {
+      const row = this.claim(scope, id, leaseToken);
+      this.db.prepare('UPDATE app_messages SET lease_until=? WHERE id=?').run(this.clock() + leaseMs, row.id);
+      return this.receipt(scope, id)!;
+    });
+  }
+
+  /** Low-level settlement. The exact live token is consumed; never retry an unknown ACK outcome. */
   ack(scope: MessageScope, id: string, leaseToken: string): MessageReceipt {
     return this.transaction(() => {
       const row = this.claim(scope, id, leaseToken);
@@ -141,7 +154,7 @@ export class MessageStore {
   close(): void { if (this.closed) return; this.closed = true; this.db.close(); }
 
   private row(scope: MessageScope, id: string): Row | undefined {
-    if (typeof id !== 'string' || id.length > 256) throw new ProgramError('INVALID_INPUT', 'Invalid message id');
+    if (typeof id !== 'string' || !id || id.length > 256) throw new ProgramError('INVALID_INPUT', 'Invalid message id');
     return this.db.prepare('SELECT * FROM app_messages WHERE owner_id=? AND program=? AND id=?').get(scope.ownerId, scope.program, id) as unknown as Row | undefined;
   }
   private claim(scope: MessageScope, id: string, token: string): Row {

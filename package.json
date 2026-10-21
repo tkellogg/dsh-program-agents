@@ -4,21 +4,52 @@
   "description": "Supervised TypeScript/JavaScript programs for DeepSeek Harness",
   "type": "module",
   "license": "MIT",
-  "engines": { "node": ">=22.18.0" },
+  "engines": {
+    "node": ">=22.18.0"
+  },
   "main": "./dist/host/index.js",
   "types": "./dist/host/index.d.ts",
   "exports": {
-    ".": { "types": "./dist/host/index.d.ts", "default": "./dist/host/index.js" },
-    "./endpoints": { "types": "./dist/endpoints.d.ts", "default": "./dist/endpoints.js" },
-    "./app": { "types": "./dist/app/index.d.ts", "default": "./dist/app/index.js" },
-    "./monitoring": { "types": "./dist/monitoring/index.d.ts", "default": "./dist/monitoring/index.js" },
-    "./supervision": { "types": "./dist/supervision.d.ts", "default": "./dist/supervision.js" },
-    "./sdk": { "types": "./dist/sdk/index.d.ts", "default": "./dist/sdk/index.js" },
-    "./runtime": { "types": "./dist/runtime/index.d.ts", "default": "./dist/runtime/index.js" },
+    ".": {
+      "types": "./dist/host/index.d.ts",
+      "default": "./dist/host/index.js"
+    },
+    "./endpoints": {
+      "types": "./dist/endpoints.d.ts",
+      "default": "./dist/endpoints.js"
+    },
+    "./app": {
+      "types": "./dist/app/index.d.ts",
+      "default": "./dist/app/index.js"
+    },
+    "./monitoring": {
+      "types": "./dist/monitoring/index.d.ts",
+      "default": "./dist/monitoring/index.js"
+    },
+    "./supervision": {
+      "types": "./dist/supervision.d.ts",
+      "default": "./dist/supervision.js"
+    },
+    "./sdk": {
+      "types": "./dist/sdk/index.d.ts",
+      "default": "./dist/sdk/index.js"
+    },
+    "./runtime": {
+      "types": "./dist/runtime/index.d.ts",
+      "default": "./dist/runtime/index.js"
+    },
     "./client": "./dist/client.js",
     "./package.json": "./package.json"
   },
-  "files": ["dist", "examples", "README.md", "LICENSE", "docs", "skills", "schemas"],
+  "files": [
+    "dist",
+    "examples",
+    "README.md",
+    "LICENSE",
+    "docs",
+    "skills",
+    "schemas"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.json && node scripts/build-client.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
@@ -26,36 +57,45 @@
     "check": "npm run build && npm test",
     "example": "tsx examples/standalone-supervisor.ts"
   },
-  "dependencies": { "@deepseek-ai/schemastery": "3.18.5" },
+  "dependencies": {
+    "@deepseek-ai/schemastery": "3.18.5",
+    "@modelcontextprotocol/core": "2.2.0",
+    "ajv": "^8.20.0",
+    "zod": "^4.6.7"
+  },
   "peerDependencies": {
     "@deepseek-ai/cordis": "~4.0.5",
     "@deepseek-ai/dsh-agent": "0.2.1-rc.2",
     "@deepseek-ai/dsh-llm": "0.2.1-rc.2",
-    "@deepseek-ai/dsh-tools": "0.2.1-rc.2",
     "@deepseek-ai/dsh-session": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-tools": "0.2.1-rc.2",
     "@deepseek-ai/dsh-typert-protocol": "0.2.1-rc.2"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "~4.0.5",
     "@deepseek-ai/dsh-agent": "0.2.1-rc.2",
     "@deepseek-ai/dsh-llm": "0.2.1-rc.2",
-    "@deepseek-ai/dsh-tools": "0.2.1-rc.2",
     "@deepseek-ai/dsh-session": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-tools": "0.2.1-rc.2",
     "@deepseek-ai/dsh-typert-protocol": "0.2.1-rc.2",
     "@types/node": "^22.18.0",
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
-    "linkedom": "^0.18.0",
-    "react-dom": "^18.3.0",
     "esbuild": "^0.25.0",
+    "linkedom": "^0.18.0",
     "react": "^18.3.0",
+    "react-dom": "^18.3.0",
     "tsx": "^4.20.0",
     "typescript": "^5.9.0"
   },
   "dsh": {
     "client": {
       "platform": "web",
-      "inject": ["@deepseek-ai/dsh-client-connection", "@deepseek-ai/dsh-client-ui-conversation", "@deepseek-ai/dsh-client-ui-renderer"]
+      "inject": [
+        "@deepseek-ai/dsh-client-connection",
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-ui-renderer"
+      ]
     }
   }
 }

@@ -3,6 +3,12 @@ import { assertJson, isRecord, ProgramError, validName } from '../runtime/protoc
 import { createLogger, type LoggerOptions } from '../monitoring/logger.js';
 import type { InboxMessage, MessageReceipt, ReceiveOptions } from './mailbox.js';
 import { createProgramEndpoints } from './endpoints.js';
+import{createProgramInbox}from'./inbox.js';
+import{createProgramAgents}from'./agents.js';
+import{createProgramTools}from'./tools.js';
+export*from'./inbox.js';
+export*from'./agents.js';
+export*from'./tools.js';
 
 export {installGlobalErrorHandlers}from'../monitoring/fatal.js';
 export { createLogger, StructuredLogger, type LoggerOptions, type LogMetadata } from '../monitoring/logger.js';
@@ -93,11 +99,7 @@ export function connectProgram(options: ConnectProgramOptions = {}) {
     }
   };
   const sendSupervisor = (body: JsonValue, sendOptions: SendOptions = {}) => call<JsonValue>('supervisor.send', { body, ...(sendOptions.correlationId === undefined ? {} : { correlationId: sendOptions.correlationId }) }, sendOptions);
-  const claimArgs = (message: Pick<InboxMessage, 'id' | 'leaseToken'> | string, leaseToken?: string): { id: string; leaseToken: string } => {
-    const result = typeof message === 'string' ? { id: message, leaseToken } : message;
-    if (!result || typeof result.id !== 'string' || typeof result.leaseToken !== 'string') throw new ProgramError('INVALID_INPUT', 'Ack/nack requires the received message or its id and leaseToken');
-    return { id: result.id, leaseToken: result.leaseToken };
-  };
+  const tools=createProgramTools(call);
   return {
     id: options.runId ?? process.env.DSH_PROGRAM_RUN_ID,
     generation,
@@ -106,30 +108,23 @@ export function connectProgram(options: ConnectProgramOptions = {}) {
     endpoints: createProgramEndpoints(call),
     sendSupervisor,
     supervisor: { send: sendSupervisor },
+    /** @deprecated Use tools.listTools/callTool; these were host-registered tools, not a continual-learning functions system. */
     functions: {
       list: (callOptions?: CallOptions) => call<FunctionInfo[]>('functions.list', null, callOptions),
       call: <T = JsonValue>(name: string, args: JsonValue = null, callOptions?: CallOptions) => call<T>('functions.call', { name, args }, callOptions),
     },
-    agents: {
-      list: (callOptions?: CallOptions) => call<AgentInfo[]>('agents.list', null, callOptions),
-      get: (id: string, callOptions?: CallOptions) => call<AgentInfo | null>('agents.get', { id }, callOptions),
-      send: (id: string, body: JsonValue, sendOptions: SendOptions = {}) => call<JsonValue>('agents.send', { id, body, ...(sendOptions.correlationId === undefined ? {} : { correlationId: sendOptions.correlationId }) }, sendOptions),
-    },
+    agents:createProgramAgents(call),
     mcp: {
+      forServer:(server:string)=>createProgramTools(call,server),
+      listTools:tools.listTools,
+      callTool:tools.callTool,
+      /** @deprecated Use mcp.forServer(server).listTools(). */
       list: (callOptions?: CallOptions) => call<McpToolInfo[]>('mcp.list', null, callOptions),
       call: <T = JsonValue>(server: string, tool: string, args: JsonValue = null, callOptions?: CallOptions) => call<T>('mcp.call', { server, tool, args }, callOptions),
     },
     models: { call: <T = JsonValue>(input: JsonValue, callOptions?: CallOptions) => call<T>('models.call', input, callOptions) },
-    tools: { call: <T = JsonValue>(name: string, args: JsonValue = null, callOptions?: CallOptions) => call<T>('tools.call', { name, args }, callOptions) },
-    inbox: {
-      receive: (receiveOptions: ReceiveOptions & CallOptions = {}) => {
-        const { waitMs, leaseMs, ...callOptions } = receiveOptions;
-        return call<InboxMessage | null>('inbox.receive', { ...(waitMs === undefined ? {} : { waitMs }), ...(leaseMs === undefined ? {} : { leaseMs }) }, callOptions);
-      },
-      ack: (message: Pick<InboxMessage, 'id' | 'leaseToken'> | string, leaseToken?: string, callOptions?: CallOptions) => call<MessageReceipt>('inbox.ack', claimArgs(message, leaseToken), callOptions),
-      nack: (message: Pick<InboxMessage, 'id' | 'leaseToken'> | string, leaseToken?: string, callOptions?: CallOptions) => call<MessageReceipt>('inbox.nack', claimArgs(message, leaseToken), callOptions),
-      receipt: (id: string, callOptions?: CallOptions) => call<MessageReceipt | null>('inbox.receipt', { id }, callOptions),
-    },
+    tools,
+    inbox:createProgramInbox(call),
   };
 }
 export type ProgramConnection = ReturnType<typeof connectProgram>;
