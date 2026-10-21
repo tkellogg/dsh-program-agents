@@ -17,7 +17,7 @@ function outputReady(run: ProgramSnapshot, source: Map<string, string>): { ready
 test('actual command and SDK children use fresh run-scoped credentials, output hooks, and revoke on stop', async (t) => {
   const server = new AppBridgeServer({ handler: async (context, method, input) => {
     assert.equal(context.run.ownerId, 'owner');
-    assert.equal(method, 'functions.call');
+    assert.equal(method, 'tools.callTool');
     return { echoed: input, generation: context.run.generation };
   } });
   await server.ready;
@@ -62,7 +62,7 @@ test('actual command and SDK children use fresh run-scoped credentials, output h
   const oldEnv = envs.get(`${command.id}:1`)!;
   const nextEnv = envs.get(`${command.id}:2`)!;
   assert.notEqual(oldEnv.DSH_PROGRAM_BRIDGE_TOKEN, nextEnv.DSH_PROGRAM_BRIDGE_TOKEN);
-  await assert.rejects(connectProgram({ url: oldEnv.DSH_PROGRAM_BRIDGE_URL, token: oldEnv.DSH_PROGRAM_BRIDGE_TOKEN }).call('functions.call'), hasCode('UNAUTHORIZED'));
+  await assert.rejects(connectProgram({ url: oldEnv.DSH_PROGRAM_BRIDGE_URL, token: oldEnv.DSH_PROGRAM_BRIDGE_TOKEN }).call('tools.callTool'), hasCode('UNAUTHORIZED'));
   const sdk = await supervisor.start({ program: 'sdk', ownerId: 'owner' });
   const sdkInfo = await ready(sdk);
   assert.equal(sdkInfo.ipc, 'function');

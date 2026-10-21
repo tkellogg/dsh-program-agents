@@ -28,8 +28,9 @@ test('bridge uses authoritative run identity and all named helpers preserve exac
   await server.ready;
   const env = server.register(snapshot(), { command: ['node', 'app.js'] }).env;
   const client = connectProgram(configured(env));
-  await client.functions.list();
-  await client.functions.call('sum', { x: 1 });
+  assert.equal('functions' in client, false);
+  await client.tools.listTools({cursor:'0'});
+  await client.tools.callTool({name:'sum',arguments:{x:1}});
   await client.mcp.list();
   await client.mcp.call('calendar', 'create', { title: 'Meeting' });
   await client.agents.list();
@@ -44,8 +45,8 @@ test('bridge uses authoritative run identity and all named helpers preserve exac
   await client.inbox.nack('message', 'secret');
   await client.inbox.receipt('message');
   assert.deepEqual(seen, [
-    { method: 'functions.list', input: null },
-    { method: 'functions.call', input: { name: 'sum', args: { x: 1 } } },
+    { method: 'tools.listTools', input: {cursor:'0'} },
+    { method: 'tools.callTool', input: { name: 'sum', arguments: { x: 1 } } },
     { method: 'mcp.list', input: null },
     { method: 'mcp.call', input: { server: 'calendar', tool: 'create', args: { title: 'Meeting' } } },
     { method: 'agents.list', input: null },
@@ -75,7 +76,7 @@ test('bridge rejects browser auth, malformed envelopes, oversized requests, and 
   assert.equal((await direct(env, { method: 'agents.list', input: null }, { Origin: 'http://127.0.0.1:3080' })).status, 403);
   assert.equal((await direct(env, { method: 'agents.list', input: null, ownerId: 'intruder' })).status, 400);
   assert.equal((await direct(env, 'not-json')).status, 400);
-  assert.equal((await direct(env, { method: 'functions.call', input: 'x'.repeat(65536) })).status, 413);
+  assert.equal((await direct(env, { method: 'tools.callTool', input: 'x'.repeat(65536) })).status, 413);
   assert.equal(calls, 0);
   await connectProgram(configured(env)).call('agents.list');
   assert.equal(calls, 1);
@@ -103,15 +104,15 @@ test('deadline slots remain occupied until non-cooperative handlers settle and r
   const run = snapshot();
   const env = server.register(run, { command: ['node'] }).env;
   const client = connectProgram(configured(env));
-  const timed = client.call('functions.call');
+  const timed = client.call('tools.callTool');
   await started;
   await assert.rejects(timed, hasCode('TIMEOUT'));
   assert.equal(handlerSignal.aborted, true);
-  await assert.rejects(client.call('functions.call'), hasCode('BACKPRESSURE'));
+  await assert.rejects(client.call('tools.callTool'), hasCode('BACKPRESSURE'));
   finish(null);
   await new Promise<void>((resolve) => setImmediate(resolve));
   const secondStarted = new Promise<void>((resolve) => { entered = resolve; });
-  const active = client.call('functions.call');
+  const active = client.call('tools.callTool');
   await secondStarted;
   server.revoke(run);
   assert.equal(handlerSignal.aborted, true);

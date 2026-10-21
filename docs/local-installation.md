@@ -1,6 +1,12 @@
 # Local installation — 2026-10-19
 
-## Current managed API revision — installed 2026-10-21
+## Current tools-only revision — installed 2026-10-21
+
+Active entry **program-agents-strip-v11**, host `dist/host/installed-v11.js`. Removed the custom registry, app/service aliases, bridge routes, grant types and configuration field. No renamed replacement registry: discovery/calls now use only the exact parent's existing DSH tool runtime and connected MCP tools. Legacy removed grants are rejected rather than silently promoted to broader tool authority. Skill/docs now describe the native tool integration only; user UI-pattern guidance remains untouched.
+
+**176/176 tests pass** with installed carrier regressions. Negative coverage verifies the removed app/service APIs are absent, removed bridge methods cannot execute, and removed registration grants reject. Native DSH tool and MCP discovery, policy dispatch, structured/scalar results, managed inboxes and typed Agent replies remain covered. Actual GUI refresh has zero runtime exceptions and dynamic links still update across restart. Existing app health, original DSH Node PID11160, model catalog and unrelated profile settings preserved; running Dynamic/Watch demos restored.
+
+## Previous managed API revision — installed 2026-10-21
 
 Active entry **program-agents-strip-v10**, host `dist/host/installed-v10.js`. Plugin-only upgrade in the existing GUI http://127.0.0.1:3080; original Node PID11160 and unrelated profile/model settings preserved. Public provider metadata unchanged. Exactly one enabled/active program plugin. Existing Dynamic/Watch demos restored; disposable managed inbox smoke process stopped and its launch description removed.
 

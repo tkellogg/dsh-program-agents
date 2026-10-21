@@ -9,7 +9,6 @@ import {MessageStore} from '../app/mailbox.js';
 import {SupervisorRouter} from './agents.js';
 import {SupervisionPolicies} from './policies.js';
 import {ProgramOperations} from './operations.js';
-import {AppFunctions} from './functions.js';
 import{RequestStore}from'./requests.js';
 import type{AgentTarget,RequestRecord}from'../requests.js';
 import{listTools,callTool}from'./tool-client.js';
@@ -44,7 +43,6 @@ export class DshProgramAdapter {
   readonly mailbox:MessageStore;
   readonly requests:RequestStore;
   private requestDispatches=new Map<string,AbortController>();
-  readonly functions=new AppFunctions();
   readonly router:SupervisorRouter;
   readonly policies:SupervisionPolicies;
   readonly operations:ProgramOperations;
@@ -66,7 +64,7 @@ export class DshProgramAdapter {
     this.capabilities.register({name:'tools.call',description:'Call an explicitly allowed visible DSH tool through policy. Native presentation only.',handler:(input,c)=>this.tool(input,c.run,c.signal)});
     try{
     this.supervisor = new ProgramSupervisor({
-      programs: Object.fromEntries(Object.entries(config.programs??{}).map(([name,{models,tools,functions,mcp,messaging,maxModelOutputTokens,...definition}])=>{
+      programs: Object.fromEntries(Object.entries(config.programs??{}).map(([name,{models,tools,mcp,messaging,maxModelOutputTokens,...definition}])=>{
         // Schemastery fills optional array fields with []; preserve entry XOR argv.
         if(!definition.command?.length)delete definition.command;
         if(definition.command&&!definition.args?.length)delete definition.args;
@@ -162,21 +160,19 @@ export class DshProgramAdapter {
       exactKeys(o,['id','target','body','correlationId']);if(o.id!==undefined&&o.target!==undefined)throw Error('Supply id or target, not both');const target=(o.target??text(o.id,'agent id'))as AgentTarget;return json(await this.router.sendTo(run.ownerId,target,json(o.body),signal,o.correlationId===undefined?undefined:text(o.correlationId,'correlationId')));
     }
     if(method==='tools.listTools'){
-      exactKeys(o,['cursor','server']);return listTools(owner,access,this.functions,o);
+      exactKeys(o,['cursor','server']);return listTools(owner,access,o);
     }
     if(method==='tools.callTool'){
-      exactKeys(o,['name','arguments','_meta','server']);return callTool(owner,access,this.functions,o,run,signal,async(name,args)=>{
+      exactKeys(o,['name','arguments','_meta','server']);return callTool(owner,access,o,signal,async(name,args)=>{
        const effectId=randomUUID();this.audit(run,effectId,name,'started',args);try{const result=await this.ctx.agents.withInitiator(owner,()=>owner.ctx.tools.execute({callId:`program-mcp-${randomUUID()}`as never,name,arguments:args as never,agent:owner,signal}));this.audit(run,effectId,name,'settled',json(result,1048576));return result;}catch(error){this.audit(run,effectId,name,signal.aborted?'outcome-unknown':'failed',null);throw error;}
       });
     }
-    if(method==='functions.list'){exactKeys(o,[]);return json(this.functions.list(access.functions??[]));}
-    if(method==='functions.call'){exactKeys(o,['name','args']);const name=text(o.name,'function'),args=json(o.args??null),effectId=randomUUID();this.audit(run,effectId,'function:'+name,'started',args);try{const result=json(await this.functions.call(name,args,access.functions??[],run,signal),57344);this.audit(run,effectId,'function:'+name,'settled',result);return result;}catch(error){this.audit(run,effectId,'function:'+name,signal.aborted?'outcome-unknown':'failed',null);throw error;}}
     if(method==='mcp.list'){exactKeys(o,[]);return json((access.mcp??[]).flatMap(server=>server.tools.map(tool=>({server:server.server,tool,name:`mcp__${server.server}__${tool}`}))));}
     if(method==='mcp.call'){exactKeys(o,['server','tool','args']);const server=text(o.server,'server'),tool=text(o.tool,'tool');if(!access.mcp?.some(row=>row.server===server&&row.tools.includes(tool)))throw Error('MCP tool not granted');return this.dispatchTool(run,`mcp__${server}__${tool}`,json(o.args??{}),signal);}
     if(method==='tools.call'){exactKeys(o,['name','args']);const name=text(o.name,'tool');if(!access.tools?.includes(name)||name.startsWith('program_')||name==='run_code')throw Error('Tool not granted');return this.dispatchTool(run,name,json(o.args??{}),signal);}
     if(method==='models.call')return this.model(input,run,signal);
     const capability=this.capabilities.get(method);if(capability&&this.definition(run.ownerId,run.program)?.allowedCapabilities?.includes(method))return capability.handler(input,{run,signal});
-    throw Error('Unknown or ungranted app function');
+    throw Error('Unknown or ungranted app method');
   }
   private requestView(record:RequestRecord|null):JsonValue{
     if(!record)return null;return json({requestId:record.id,status:record.status,createdAt:record.createdAt,deadline:record.deadline,...record.agentId===undefined?{}:{agentId:record.agentId},...record.response===undefined?{}:{response:record.response},...record.error===undefined?{}:{error:record.error}},57344);

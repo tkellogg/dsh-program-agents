@@ -19,7 +19,7 @@ const resource=z.union([
 export const Config: z<PluginConfig>=z.object({
   auditDirectory:z.string(),catalogDirectory:z.string(),logDirectory:z.string(),
   networking:z.object({bindHost:z.string(),publicHost:z.string(),protocol:z.union(['http','https'])}),
-  programs:z.dict(z.object({entry:z.string(),command:z.array(z.string()),name:z.string(),description:z.string(),urls:z.array(resource),endpoints:z.dict(z.object({port:z.union([z.const('dynamic'),z.number().min(1).max(65535).step(1)]).required()})),logsPath:z.string(),cwd:z.string(),args:z.array(z.string()),env:z.dict(z.string()).role('secret'),allowedCapabilities:z.array(z.string()),supervision,functions:z.array(z.string()),mcp:z.array(z.object({server:z.string(),tools:z.array(z.string())})),messaging:z.boolean(),models:z.array(z.object({provider:z.string().required(),model:z.string().required()})),tools:z.array(z.string()),maxModelOutputTokens:z.number().min(1).step(1)})).default({}),
+  programs:z.dict(z.object({entry:z.string(),command:z.array(z.string()),name:z.string(),description:z.string(),urls:z.array(resource),endpoints:z.dict(z.object({port:z.union([z.const('dynamic'),z.number().min(1).max(65535).step(1)]).required()})),logsPath:z.string(),cwd:z.string(),args:z.array(z.string()),env:z.dict(z.string()).role('secret'),allowedCapabilities:z.array(z.string()),supervision,mcp:z.array(z.object({server:z.string(),tools:z.array(z.string())})),messaging:z.boolean(),models:z.array(z.object({provider:z.string().required(),model:z.string().required()})),tools:z.array(z.string()),maxModelOutputTokens:z.number().min(1).step(1)})).default({}),
   maxRuns:z.number().min(1).max(64).step(1).default(8),maxHistory:z.number().min(1).max(256).step(1).default(64),
   startupTimeoutMs:z.number().min(100).default(10000),stopTimeoutMs:z.number().min(100).default(3000),callTimeoutMs:z.number().min(100).default(120000)
 });
@@ -29,10 +29,6 @@ export class ProgramAgentsService extends Service {
   constructor(ctx:Context,config:PluginConfig){super(ctx,'programAgents');this.adapter=new DshProgramAdapter(ctx,config);}
   get supervisor(){return this.adapter.supervisor;}
   get capabilities(){return this.adapter.capabilities;}
-  /** Register host JSON tools; exposed to apps through the MCP-shaped tool client. */
-  get appTools(){return this.adapter.functions;}
-  /** @deprecated Historical alias; these are tools, not a separate functions system. */
-  get functions(){return this.adapter.functions;}
 }
 function caller(exec:{agent?:Agent}):Agent{if(!exec.agent)throw new Error('A live parent Agent is required');return exec.agent;}
 const output={schema:{type:'json' as const},render:(_args:unknown,value:unknown)=>[{type:'text' as const,text:JSON.stringify(value)}]};

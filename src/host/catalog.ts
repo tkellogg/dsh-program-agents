@@ -7,7 +7,7 @@ import{normalizeSupervision,type SupervisionSettings}from'../supervision.js';
 import type{ProgramUrlDefinition,ProgramEndpointDefinition}from'../endpoints.js';
 
 export interface Registration {name:string;description:string;command:string[];cwd?:string;urls?:ProgramUrlDefinition[];endpoints?:Record<string,ProgramEndpointDefinition>;logsPath?:string;supervision?:SupervisionSettings}
-export interface ProgramAccess {functions?:string[];tools?:string[];mcp?:Array<{server:string;tools:string[]}>;messaging?:boolean}
+export interface ProgramAccess {tools?:string[];mcp?:Array<{server:string;tools:string[]}>;messaging?:boolean}
 interface Saved {ownerId:string;entries:Array<{program:string;definition:ProgramDefinition;access?:ProgramAccess}>}
 /** Durable launch descriptions only, never execution state or child credentials. */
 export class ProgramCatalog {
@@ -36,7 +36,7 @@ export class ProgramCatalog {
  visible(owner:string,program:string){return this.configured.has(program)||this.load(owner).entries.some(e=>e.program===program);}
  list(owner:string){this.load(owner);return this.supervisor.definitionsList().filter(d=>this.visible(owner,d.program));}
  access(owner:string,program:string){return this.load(owner).entries.find(e=>e.program===program)?.access??{};}
- private accessValue(input:unknown):ProgramAccess{const a=object(input);exactKeys(a,['functions','tools','mcp','messaging']);const names=(value:unknown)=>{if(value===undefined)return undefined;if(!Array.isArray(value)||value.length>128||value.some(v=>typeof v!=='string'||!/^[A-Za-z][A-Za-z0-9_.:-]{0,119}$/.test(v)))throw Error('Invalid access allowlist');return value as string[];};if(a.messaging!==undefined&&typeof a.messaging!=='boolean')throw Error('Invalid messaging access');let mcp:ProgramAccess['mcp'];if(a.mcp!==undefined){if(!Array.isArray(a.mcp)||a.mcp.length>32)throw Error('Invalid MCP access');mcp=a.mcp.map(raw=>{const row=object(raw);exactKeys(row,['server','tools']);const server=text(row.server,'MCP server',32);if(!/^[A-Za-z0-9_-]+$/.test(server))throw Error('Invalid MCP server');return{server,tools:names(row.tools)??[]};});}return{...(a.functions===undefined?{}:{functions:names(a.functions)!}),...(a.tools===undefined?{}:{tools:names(a.tools)!}),...(mcp===undefined?{}:{mcp}),messaging:a.messaging===true};}
+ private accessValue(input:unknown):ProgramAccess{const a=object(input);exactKeys(a,['tools','mcp','messaging']);const names=(value:unknown)=>{if(value===undefined)return undefined;if(!Array.isArray(value)||value.length>128||value.some(v=>typeof v!=='string'||!/^[A-Za-z][A-Za-z0-9_.:-]{0,119}$/.test(v)))throw Error('Invalid access allowlist');return value as string[];};if(a.messaging!==undefined&&typeof a.messaging!=='boolean')throw Error('Invalid messaging access');let mcp:ProgramAccess['mcp'];if(a.mcp!==undefined){if(!Array.isArray(a.mcp)||a.mcp.length>32)throw Error('Invalid MCP access');mcp=a.mcp.map(raw=>{const row=object(raw);exactKeys(row,['server','tools']);const server=text(row.server,'MCP server',32);if(!/^[A-Za-z0-9_-]+$/.test(server))throw Error('Invalid MCP server');return{server,tools:names(row.tools)??[]};});}return{...(a.tools===undefined?{}:{tools:names(a.tools)!}),...(mcp===undefined?{}:{mcp}),messaging:a.messaging===true};}
  register(owner:string,input:unknown,cwd:string){
   const p=object(input);exactKeys(p,['name','description','command','cwd','urls','endpoints','logsPath','supervision','access']);
   const name=text(p.name,'name',120),description=text(p.description,'description',1200);

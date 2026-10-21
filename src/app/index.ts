@@ -25,7 +25,6 @@ export interface ConnectProgramOptions {
   timeoutMs?: number;
   logger?: LoggerOptions;
 }
-export interface FunctionInfo { name: string; description?: string; inputSchema?: JsonValue }
 export interface AgentInfo { id: string; name?: string; [key: string]: JsonValue | undefined }
 export interface McpToolInfo { server: string; tool: string; name: string; description?: string; inputSchema?: JsonValue }
 export interface SendOptions extends CallOptions { correlationId?: string }
@@ -108,11 +107,6 @@ export function connectProgram(options: ConnectProgramOptions = {}) {
     endpoints: createProgramEndpoints(call),
     sendSupervisor,
     supervisor: { send: sendSupervisor },
-    /** @deprecated Use tools.listTools/callTool; these were host-registered tools, not a continual-learning functions system. */
-    functions: {
-      list: (callOptions?: CallOptions) => call<FunctionInfo[]>('functions.list', null, callOptions),
-      call: <T = JsonValue>(name: string, args: JsonValue = null, callOptions?: CallOptions) => call<T>('functions.call', { name, args }, callOptions),
-    },
     agents:createProgramAgents(call),
     mcp: {
       forServer:(server:string)=>createProgramTools(call,server),
