@@ -17,13 +17,6 @@ This repo includes
 * _World-integrated agents_ — a collection of loops that poll web services like Github or Salesforce for events and messages and forward them onto a real agent
 * _Heavily AI-integrated software_ — Regular software with agents and chatbots wired deeply throughout
 
-## Why not just regular software?
-* _Error handling_ — software that discovers problems and dynamically adapts
-* _Slowly changing software_ — e.g. in data engineering you'll run into new data bugs or learn new things about the data in production. Program agents merely evolve to handle new situations
-* _World-integrated agents_ — a collection of loops that poll web services like Github or Salesforce for events and messages and forward them onto a real agent
-* _Heavily AI-integrated software_ — Regular software with agents and chatbots wired deeply throughout
-
-
 ## Installation
 
 Use [Node.js](https://nodejs.org/) **24.9 or newer** (Node 24 LTS is a good choice). Node 23 is unsupported: older builds can make every `dsh` command silently exit. This plugin currently targets **DSH 0.2.1-rc.2**; use that version for the setup below.
