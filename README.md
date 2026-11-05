@@ -13,18 +13,25 @@ This repo includes
 
 ## Installation
 
-You'll need [Node.js](https://nodejs.org/) **22.18 or newer**. This plugin currently targets **DSH 0.2.1-rc.2**; use that version for the setup below.
+Use [Node.js](https://nodejs.org/) **24.9 or newer** (Node 24 LTS is a good choice). Node 23 is unsupported: older builds can make every `dsh` command silently exit. This plugin currently targets **DSH 0.2.1-rc.2**; use that version for the setup below.
 
 ### 1. Install DSH
 
-Install the [DSH CLI](https://github.com/deepseek-ai/deepseek-harness) and pnpm:
+Check your Node and pnpm versions. Reuse an existing pnpm installation, including one installed through Homebrew. If pnpm is missing, install it separately with `npm install -g pnpm@10`.
+
+Then install the [DSH CLI](https://github.com/deepseek-ai/deepseek-harness):
 
 ```sh
-npm install -g @deepseek-ai/dsh@0.2.1-rc.2 pnpm@10
+node --version # Must be v24.9.0 or newer.
+pnpm --version
+npm install -g @deepseek-ai/dsh@0.2.1-rc.2
+dsh --version # Must print 0.2.1-rc.2.
 dsh web
 ```
 
 DSH opens its web UI at `http://127.0.0.1:3080` and creates your web profile. Stop it with **Ctrl+C** while you install the plugins below.
+
+Note: DSH requires `node>=24`, and a version that's too low will cause a silent exit. A workaround, if you need old node, is to run dsh via `npx --yes --package=node@24 -c 'dsh web'`.
 
 ### 2. Install Program Agents
 
@@ -55,6 +62,8 @@ In DSH, open **Settings → Subscriptions** and click **Connect** for the provid
 These providers use your subscription login, so no API key is needed. Open the session's model picker (`/model`) and select a model under **ChatGPT (Codex)** or **Claude (Subscription)**.
 
 If you use another model provider, skip the subscriptions plugin and run `dsh web` after step 2. In a new chat, ask DSH to use the **program-agents** skill to build and start a program. The **Program agents** panel above the composer shows its status and Start/Stop/Restart controls.
+
+If `dsh web` and `dsh --version` both return without output, check `node --version`. DSH uses [`import.meta.main`](https://nodejs.org/api/esm.html#importmetamain), which is absent in older Node releases such as 23.4. Upgrade Node, verify that `dsh --version` prints a version, then repeat the plugin installation commands: they also did nothing under the older runtime. DSH `0.2.2-rc.1` requires Node 24.9+, but Program Agents 0.1.1 still declares DSH `0.2.1-rc.2` peer dependencies.
 
 ## Why not just regular software?
 * _Error handling_ — software that discovers problems and dynamically adapts
