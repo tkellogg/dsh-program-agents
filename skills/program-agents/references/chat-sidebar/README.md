@@ -11,9 +11,9 @@ A small React sidebar for an app you supervise. This is reference source, **not*
 | [protocol.ts](protocol.ts) | Browser-pure frame reducer, compact reconnect baseline, transcript projection, bounded fetch-SSE |
 | [agent-sidebar.css](agent-sidebar.css) | Scoped responsive CSS; imported by the component |
 
-Application runtime dependencies: `@tkellogg/dsh-program-agents` with the `conversations` API, **Hono 4**, **React 18+**, **react-dom**, and an HTTP adapter such as **@hono/node-server**. TypeScript/Vite/tsx, `@types/react`, `@types/react-dom`, and `@types/node` are development tooling. Install these in your own application using its package manager and lockfile. This reference does not install or run anything. Repository tests use the installed native DSH message constructors and stream accumulator rather than invented token formats.
+Application runtime dependencies: `@kelloggt/dsh-program-agents` with the `conversations` API, **Hono 4**, **React 18+**, **react-dom**, and an HTTP adapter such as **@hono/node-server**. TypeScript/Vite/tsx, `@types/react`, `@types/react-dom`, and `@types/node` are development tooling. Install these in your own application using its package manager and lockfile. This reference does not install or run anything. Repository tests use the installed native DSH message constructors and stream accumulator rather than invented token formats.
 
-- Backend runtime import: `connectProgram` from `@tkellogg/dsh-program-agents/app`.
+- Backend runtime import: `connectProgram` from `@kelloggt/dsh-program-agents/app`.
 - Backend types: `ConversationHandle`, `ConversationMessage`, `ConversationOpenOptions`, `ProgramConversations`, `JsonValue` from that same entrypoint; `Hono`/`Context` from `hono`.
 - Frontend/shared SDK imports are **type-only**: `ConversationFrame`, `ConversationReceipt`, `SessionFollowFrame`, `SessionPage`, `JsonValue`. No runtime SDK/Node code enters the browser bundle.
 - Use a bundler with TSX and CSS support. Relative source imports use `.js` for ESM/NodeNext TypeScript projects.
@@ -26,7 +26,7 @@ This example assumes a same-origin app serving both assets and API. `APP_ORIGIN`
 import { createServer } from 'node:http';
 import { getRequestListener } from '@hono/node-server';
 import { Hono } from 'hono';
-import { connectProgram, installGlobalErrorHandlers } from '@tkellogg/dsh-program-agents/app';
+import { connectProgram, installGlobalErrorHandlers } from '@kelloggt/dsh-program-agents/app';
 import { mountAgentSidebar } from './chat-sidebar/backend.js';
 
 const dsh = connectProgram({ logger: { logsPath: './logs', stdout: true, private: true } });

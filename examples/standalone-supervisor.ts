@@ -1,5 +1,5 @@
 import { resolve } from 'node:path';
-import { ProgramSupervisor } from '@tkellogg/dsh-program-agents/runtime';
+import { ProgramSupervisor } from '@kelloggt/dsh-program-agents/runtime';
 
 const supervisor=new ProgramSupervisor({
   programs:{dashboard:{entry:resolve('examples/dashboard.ts'),allowedCapabilities:[]}},

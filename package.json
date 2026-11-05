@@ -1,5 +1,5 @@
 {
-  "name": "@tkellogg/dsh-program-agents",
+  "name": "@kelloggt/dsh-program-agents",
   "version": "0.1.0",
   "description": "Supervised TypeScript/JavaScript programs for DeepSeek Harness",
   "type": "module",

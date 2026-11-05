@@ -1,4 +1,4 @@
-import{connectProgram,installGlobalErrorHandlers}from'@tkellogg/dsh-program-agents/app';
+import{connectProgram,installGlobalErrorHandlers}from'@kelloggt/dsh-program-agents/app';
 const program=connectProgram({logger:{logsPath:'./logs',stdout:true,private:true}});
 installGlobalErrorHandlers(program.logger);
 program.logger.info('Inbox worker ready',{pid:process.pid},{log_type:'com.example.inbox.ready.v1'});

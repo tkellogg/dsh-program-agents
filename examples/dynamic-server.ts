@@ -1,5 +1,5 @@
 import {createServer}from'node:http';
-import {connectProgram,installGlobalErrorHandlers}from'@tkellogg/dsh-program-agents/app';
+import {connectProgram,installGlobalErrorHandlers}from'@kelloggt/dsh-program-agents/app';
 const app=connectProgram();installGlobalErrorHandlers(app.logger);
 const startedAt=new Date().toISOString();
 const server=createServer((req,res)=>{

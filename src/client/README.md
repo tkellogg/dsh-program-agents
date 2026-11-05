@@ -1,6 +1,6 @@
 # DSH browser contribution
 
-Browser half of `@tkellogg/dsh-program-agents` for DSH `0.2.1-rc.2`.
+Browser half of `@kelloggt/dsh-program-agents` for DSH `0.2.1-rc.2`.
 The public `conversation.input.dock` contribution remains in the bottom composer
 seat: a tiny, collapsed-by-default **Program agents (N)** status strip, not a
 standalone page or a fixed-position overlay. Opening it shows compact rows in a

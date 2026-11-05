@@ -1,9 +1,9 @@
 # Managed program integration: inboxes, Agents and MCP-shaped tools
 
-Use `@tkellogg/dsh-program-agents/app` in ordinary watched programs. The library connects through private per-run/generation credentials supplied by DSH; no special entrypoint or browser cookie/provider credentials. Do not print or forward `DSH_PROGRAM_*` credentials. The composer stays compact, with no extra human message widget.
+Use `@kelloggt/dsh-program-agents/app` in ordinary watched programs. The library connects through private per-run/generation credentials supplied by DSH; no special entrypoint or browser cookie/provider credentials. Do not print or forward `DSH_PROGRAM_*` credentials. The composer stays compact, with no extra human message widget.
 
 ```ts
-import {connectProgram,installGlobalErrorHandlers,responseType} from '@tkellogg/dsh-program-agents/app';
+import {connectProgram,installGlobalErrorHandlers,responseType} from '@kelloggt/dsh-program-agents/app';
 const dsh=connectProgram({logger:{logsPath:'./logs',stdout:true,private:true}});
 installGlobalErrorHandlers(dsh.logger);
 ```

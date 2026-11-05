@@ -1,5 +1,5 @@
 // SERVER ONLY. Never import this module (or connectProgram) into the browser bundle.
-import { connectProgram, type ConversationHandle, type ConversationMessage, type ConversationOpenOptions, type JsonValue, type ProgramConversations } from '@tkellogg/dsh-program-agents/app';
+import { connectProgram, type ConversationHandle, type ConversationMessage, type ConversationOpenOptions, type JsonValue, type ProgramConversations } from '@kelloggt/dsh-program-agents/app';
 import type { Context, Hono } from 'hono';
 import { canonicalJson, object, SIDEBAR_LIMITS, utf8Bytes, type NativeFrame } from './protocol.js';
 

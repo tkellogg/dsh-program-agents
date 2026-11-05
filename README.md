@@ -31,9 +31,9 @@ DSH opens its web UI at `http://127.0.0.1:3080` and creates your web profile. St
 The first npm release is being prepared. Once published, install it with:
 
 ```sh
-dsh plugin --profile web add @tkellogg/dsh-program-agents
+dsh plugin --profile web add @kelloggt/dsh-program-agents
 mkdir -p ~/.dsh/skills
-cp -R ~/.dsh/profiles/web/node_modules/@tkellogg/dsh-program-agents/skills/program-agents ~/.dsh/skills/
+cp -R ~/.dsh/profiles/web/node_modules/@kelloggt/dsh-program-agents/skills/program-agents ~/.dsh/skills/
 ```
 
 This enables the plugin automatically. Until that release is available, build it from a checkout:

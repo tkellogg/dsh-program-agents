@@ -40,7 +40,7 @@ Program activity participates in DSH archive admission: archive without stopActi
 ## App library
 
 ```ts
-import {connectProgram} from '@tkellogg/dsh-program-agents/app';
+import {connectProgram} from '@kelloggt/dsh-program-agents/app';
 const program=connectProgram({logger:{logsPath:'./logs',stdout:true,private:true}});
 program.logger.info('ready',{}, {log_type:'com.example.app.ready.v1'});
 await program.supervisor.send({type:'work-ready',count:3},{correlationId:'batch-42'});

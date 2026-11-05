@@ -39,7 +39,7 @@ The standalone base [JSON Schema](schemas/standard-log-record.v1.schema.json) de
 Register global handlers explicitly with `installGlobalErrorHandlers(logger,{timeoutMs:500})` (exported by `/monitoring` and `/app`). It logs one standard fatal ERROR for uncaught exceptions/rejections, attempts a bounded flush, then exits nonzero. It never swallows a corrupted process or resumes execution. Disable by calling the returned disposer during orderly shutdown; do not register duplicate global handlers. The host also emits a synthetic process ERROR on nonzero exit, covering uninstrumented programs. A watched worker's fatal ERROR is monitored even when its watcher remains alive.
 
 ```ts
-import { createLogger } from '@tkellogg/dsh-program-agents/monitoring';
+import { createLogger } from '@kelloggt/dsh-program-agents/monitoring';
 const logger = createLogger({ logsPath: './logs', stdout: true, private: true });
 logger.info('request complete', { method: 'GET', path: '/health', status: 200 },
             { log_type: 'dsh.http.request.v1', operation_id: 'request-42' });

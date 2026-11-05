@@ -3,7 +3,7 @@
 Programs can give model choices stable, purpose-specific names. Declare them once during normal backend initialization; repeated identical declarations are no-ops. Defaults belong to the app, overrides belong to the user.
 
 ```ts
-import {connectProgram} from '@tkellogg/dsh-program-agents/app';
+import {connectProgram} from '@kelloggt/dsh-program-agents/app';
 const dsh=connectProgram();
 await dsh.models.declare({
   'smart-model':{

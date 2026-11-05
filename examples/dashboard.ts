@@ -1,5 +1,5 @@
 import { createServer } from 'node:http';
-import type { ProgramContext } from '@tkellogg/dsh-program-agents/sdk';
+import type { ProgramContext } from '@kelloggt/dsh-program-agents/sdk';
 
 /** Normal Node code: owns its state; DSH owns observation/control. */
 export default async function main(ctx: ProgramContext) {

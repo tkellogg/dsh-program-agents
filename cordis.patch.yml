@@ -2,4 +2,4 @@
 # through the dsh.client declaration in package.json.
 - insert:
     - id: program-agents
-      name: '@tkellogg/dsh-program-agents'
+      name: '@kelloggt/dsh-program-agents'

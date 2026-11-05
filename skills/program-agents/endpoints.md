@@ -27,7 +27,7 @@ Registration persists the recipe only. A fresh process generation starts with re
 
 ```ts
 import {createServer} from 'node:http';
-import {connectProgram} from '@tkellogg/dsh-program-agents/app';
+import {connectProgram} from '@kelloggt/dsh-program-agents/app';
 
 const app=connectProgram();
 const server=createServer((req,res)=>res.end('Hello'));

@@ -1,6 +1,6 @@
 # Publishing to npm
 
-The package name is `@tkellogg/dsh-program-agents`. Publishing requires an npm account with access to the `@tkellogg` scope. The package is configured for public access.
+The package name is `@kelloggt/dsh-program-agents`. Publishing requires an npm account with access to the `@kelloggt` scope. The package is configured for public access. The first publish creates the package on npm; there is no separate package-creation step on the website.
 
 For interactive publishing, enable **two-factor authentication (2FA)** on your npm account before the first release. On npmjs.com, open **Account → Two-Factor Authentication → Enable 2FA**; a passkey or Touch ID can serve as your security key. npm requires account 2FA or a granular access token with bypass 2FA enabled. A successful CLI login alone does not satisfy this publishing requirement. See npm's [2FA setup instructions](https://docs.npmjs.com/configuring-two-factor-authentication/).
 
@@ -34,10 +34,11 @@ Sign in and publish the same archive you inspected:
 
 ```sh
 pnpm release:login
+pnpm whoami --registry=https://registry.npmjs.org/
 pnpm release:publish
 ```
 
-Follow any authentication prompts from npm. Publishing uses the existing archive without rebuilding it. After the first release succeeds, remove the pending-release wording from the README and make npm installation the default. For future releases, update the package version and run `pnpm release:pack` again; the scripts select the matching archive automatically.
+The username check should print `kelloggt` for this personal scope. Follow any authentication prompts from npm. Publishing uses the existing archive without rebuilding it. After the first release succeeds, remove the pending-release wording from the README and make npm installation the default. For future releases, update the package version and run `pnpm release:pack` again; the scripts select the matching archive automatically.
 
 If publishing fails with **E403: Two-factor authentication or granular access token with bypass 2fa enabled is required**, check your account's 2FA settings. After enabling 2FA, run `pnpm release:login` again and retry `pnpm release:publish` in an interactive terminal. The authentication error does not require rebuilding the archive. If your configured method uses an authenticator code, you can pass it directly with `pnpm release:publish --otp=YOUR_CURRENT_CODE`; the release script forwards that option to pnpm.
 

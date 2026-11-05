@@ -1,5 +1,5 @@
 // Browser-safe: all SDK imports are types; no bridge client or Node builtins here.
-import type { ConversationFrame, JsonValue, SessionFollowFrame, SessionPage } from '@tkellogg/dsh-program-agents/app';
+import type { ConversationFrame, JsonValue, SessionFollowFrame, SessionPage } from '@kelloggt/dsh-program-agents/app';
 
 export type NativeFrame = SessionFollowFrame;
 export type NativeEvent = Extract<NativeFrame, { type: 'event' }>['event'];

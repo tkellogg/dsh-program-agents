@@ -1,5 +1,6 @@
 import {build} from 'esbuild';
-import {writeFile,mkdir,copyFile} from 'node:fs/promises';
+import {writeFile,mkdir,copyFile,readFile} from 'node:fs/promises';
+const {name:packageName}=JSON.parse(await readFile(new URL('../package.json',import.meta.url),'utf8'));
 const output=await build({entryPoints:['src/client/index.ts'],bundle:true,write:false,format:'cjs',platform:'browser',target:'es2022',external:['react','react-dom','react/jsx-runtime','react-dom/client'],sourcemap:false});
 const body=output.outputFiles[0].text;
 await mkdir('dist',{recursive:true});
@@ -20,4 +21,4 @@ await copyFile('dist/host/plugin.js','dist/host/installed-v12.js');
 await copyFile('dist/host/plugin.js','dist/host/installed-v13.js');
 // Node deliberately refuses native TS stripping inside node_modules. Ship JS examples.
 await build({entryPoints:['examples/dashboard.ts','examples/standalone-supervisor.ts','examples/inbox-worker.ts','examples/dynamic-server.ts','examples/model-slots.ts'],outdir:'dist/examples',bundle:false,format:'esm',platform:'node',target:'node22',sourcemap:false});
-await writeFile('dist/client.js',`window.__ModuleLoader__.load({id:'@tkellogg/dsh-program-agents',factory:(require)=>{var module={exports:{}};var exports=module.exports;\n${body}\nreturn module.exports;}});\n`);
+await writeFile('dist/client.js',`window.__ModuleLoader__.load({id:${JSON.stringify(packageName)},factory:(require)=>{var module={exports:{}};var exports=module.exports;\n${body}\nreturn module.exports;}});\n`);

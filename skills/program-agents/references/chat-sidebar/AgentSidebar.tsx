@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { consumeNativeSSE, initialSidebarState, object, prependHistory, reduceFrame, SIDEBAR_LIMITS, transcriptRows, utf8Bytes, type DisplayBlock, type PageContext, type SidebarState } from './protocol.js';
-import type { ConversationReceipt, SessionPage } from '@tkellogg/dsh-program-agents/app';
+import type { ConversationReceipt, SessionPage } from '@kelloggt/dsh-program-agents/app';
 import './agent-sidebar.css';
 
 export interface AgentSidebarProps {

@@ -1,4 +1,4 @@
-import{connectProgram,installGlobalErrorHandlers}from'@tkellogg/dsh-program-agents/app';
+import{connectProgram,installGlobalErrorHandlers}from'@kelloggt/dsh-program-agents/app';
 const dsh=connectProgram({logger:{logsPath:'./logs/model-slots',stdout:true,private:true}});
 installGlobalErrorHandlers(dsh.logger);
 await dsh.models.declare({
