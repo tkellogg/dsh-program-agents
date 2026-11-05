@@ -13,7 +13,7 @@ This repo includes
 
 ## Installation
 
-You'll need [Node.js](https://nodejs.org/) **22.18 or newer** and Git. This plugin currently targets **DSH 0.2.1-rc.2**; use that version for the setup below.
+You'll need [Node.js](https://nodejs.org/) **22.18 or newer**. This plugin currently targets **DSH 0.2.1-rc.2**; use that version for the setup below.
 
 ### 1. Install DSH
 
@@ -28,38 +28,17 @@ DSH opens its web UI at `http://127.0.0.1:3080` and creates your web profile. St
 
 ### 2. Install Program Agents
 
-The first npm release is being prepared. Once published, install it with:
+Install the npm package into DSH's web profile:
 
 ```sh
 dsh plugin --profile web add @kelloggt/dsh-program-agents
+
+# Install the included skill so DSH's agents know how to use program agents.
 mkdir -p ~/.dsh/skills
 cp -R ~/.dsh/profiles/web/node_modules/@kelloggt/dsh-program-agents/skills/program-agents ~/.dsh/skills/
 ```
 
-This enables the plugin automatically. Until that release is available, build it from a checkout:
-
-```sh
-git clone https://github.com/tkellogg/dsh-program-agents.git
-cd dsh-program-agents
-pnpm install --frozen-lockfile
-pnpm build
-
-# Install the skill so DSH's agents know how to use program agents.
-mkdir -p ~/.dsh/skills
-cp -R skills/program-agents ~/.dsh/skills/
-```
-
-Add the following to `~/.dsh/profiles/web/cordis.patch.yml`, keeping any existing entries. Replace `/absolute/path/to/dsh-program-agents` with the checkout's full path (run `pwd` to find it):
-
-```yaml
-- insert:
-    - id: program-agents
-      name: /absolute/path/to/dsh-program-agents/dist/host/index.js
-```
-
-Keep the checkout in that location: DSH loads the built plugin from it.
-
-Maintainers: see [Publishing to npm](docs/publishing.md) for the release steps.
+DSH enables the plugin automatically.
 
 ### 3. Connect Codex or Claude
 
