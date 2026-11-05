@@ -7,6 +7,7 @@ import { DshProgramAdapter } from './adapter.js';
 import { object, text, json, exactKeys } from './validation.js';
 import type { ProgramSnapshot } from '../types.js';
 import {programFetch} from './http.js';
+import { registerBundledSkill } from './skills.js';
 export type { PluginConfig, ProgramGrant } from './contracts.js';
 export { DshProgramAdapter } from './adapter.js';
 export const name='program-agents';
@@ -35,6 +36,7 @@ const output={schema:{type:'json' as const},render:(_args:unknown,value:unknown)
 export function apply(ctx:Context,config:PluginConfig={}){
   const service=new ProgramAgentsService(ctx,config),a=service.adapter;
   ctx.effect(()=>()=>a.dispose());
+  ctx.inject(['skills'], registerBundledSkill);
   ctx.inject(['workspaceRegistry','sessionController'],c=>{void a.restoreStartup().catch(error=>c.logger.warn('Program startup restore failed: '+String(error)));});
   ctx.on('agent/created',async({agent})=>{await a.sessionCreated(agent).catch(error=>ctx.logger.warn('Program Session startup failed: '+String(error)));return undefined;},{global:true});
   (ctx.on as (name:string,callback:(...args:any[])=>any)=>unknown)('workspace/session-activity',async({sessionId}:any,next:()=>Promise<any[]>)=>{const runs=a.supervisor.list(String(sessionId)).filter(r=>['starting','running','blocked','stopping'].includes(r.state));const rest=await next();return runs.length?[{kind:'program-agent',items:runs.map(r=>({id:r.id,label:r.name??r.label}))},...rest]:rest;});

@@ -4,7 +4,9 @@ Current UI/runtime: see `composer-strip.md` for program_register, command/watch 
 
 ## Status
 
-Local experimental source package, not published. Targets DSH0.2.1-rc.2, Cordis4.0.5. Node22.18+ with erasable TS or precompiled JS. Build with pnpm (lockfile committed). No automatic mutation of a user's profiles, credentials, model settings or running server.
+Published npm package `@kelloggt/dsh-program-agents`. Install with `dsh plugin --profile web add @kelloggt/dsh-program-agents`; the bundle enables the host and browser contribution. Version 0.1.1 adds automatic skill discovery through DSH's native provider registry. Targets DSH0.2.1-rc.2, Cordis4.0.5. Node22.18+ with erasable TS or precompiled JS. Build source checkouts with pnpm (lockfile committed).
+
+The bundled skill is loaded from the installed package, including its frontmatter and resource directory. Registration follows the optional `skills` service lifecycle, so the program tools still load in profiles without skill support. Unloading the plugin removes its provider. Project and user skill overrides retain DSH's normal precedence; an old copied skill must be removed if you want to follow the packaged version. Registration writes no files into a user's skill directories.
 
 ## Host and web contribution
 

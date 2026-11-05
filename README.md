@@ -32,13 +32,11 @@ Install the npm package into DSH's web profile:
 
 ```sh
 dsh plugin --profile web add @kelloggt/dsh-program-agents
-
-# Install the included skill so DSH's agents know how to use program agents.
-mkdir -p ~/.dsh/skills
-cp -R ~/.dsh/profiles/web/node_modules/@kelloggt/dsh-program-agents/skills/program-agents ~/.dsh/skills/
 ```
 
-DSH enables the plugin automatically.
+DSH enables the plugin and discovers its bundled **program-agents** skill automatically in version **0.1.1 and later**. Package upgrades update the skill too.
+
+If you previously copied the skill into `~/.dsh/skills/program-agents`, that copy takes precedence. Remove an old, unmodified copy to use the bundled version; keep it if you maintain your own instructions.
 
 ### 3. Connect Codex or Claude
 

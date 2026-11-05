@@ -26,7 +26,7 @@ It should contain `dist/host/index.js`, `dist/client.js`, the SDK and runtime ex
 
 The publishing dry run skips Git checks so it can preview uncommitted work. The actual publishing command keeps pnpm's normal Git checks enabled.
 
-Test the archive in a disposable DSH profile before publishing. Installing it with `dsh plugin --profile web add /absolute/path/to/the/archive.tgz` enables the plugin through its bundle patch. Install the skill as described in the README.
+Test the archive in a disposable DSH profile before publishing. Installing it with `dsh plugin --profile web add /absolute/path/to/the/archive.tgz` enables the plugin through its bundle patch and registers the bundled skill automatically. Check that `program-agents` is available without copying it into a user skill directory.
 
 ## Publish the verified archive
 
@@ -38,7 +38,7 @@ pnpm whoami --registry=https://registry.npmjs.org/
 pnpm release:publish
 ```
 
-The username check should print `kelloggt` for this personal scope. Follow any authentication prompts from npm. Publishing uses the existing archive without rebuilding it. After the first release succeeds, remove the pending-release wording from the README and make npm installation the default. For future releases, update the package version and run `pnpm release:pack` again; the scripts select the matching archive automatically.
+The username check should print `kelloggt` for this personal scope. Follow any authentication prompts from npm. Publishing uses the existing archive without rebuilding it. For future releases, update the package version and run `pnpm release:pack` again; the scripts select the matching archive automatically.
 
 If publishing fails with **E403: Two-factor authentication or granular access token with bypass 2fa enabled is required**, check your account's 2FA settings. After enabling 2FA, run `pnpm release:login` again and retry `pnpm release:publish` in an interactive terminal. The authentication error does not require rebuilding the archive. If your configured method uses an authenticator code, you can pass it directly with `pnpm release:publish --otp=YOUR_CURRENT_CODE`; the release script forwards that option to pnpm.
 

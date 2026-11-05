@@ -1,6 +1,6 @@
 {
   "name": "@kelloggt/dsh-program-agents",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Supervised TypeScript/JavaScript programs for DeepSeek Harness",
   "type": "module",
   "license": "MIT",
@@ -89,6 +89,7 @@
     "@deepseek-ai/schemastery": "3.18.5",
     "@modelcontextprotocol/core": "2.2.0",
     "ajv": "^8.20.0",
+    "yaml": "2.9.1",
     "zod": "^4.6.7"
   },
   "peerDependencies": {
@@ -97,6 +98,7 @@
     "@deepseek-ai/dsh-api-session-controller": "0.2.1-rc.2",
     "@deepseek-ai/dsh-llm": "0.2.1-rc.2",
     "@deepseek-ai/dsh-session": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-skill": "0.2.1-rc.2",
     "@deepseek-ai/dsh-tools": "0.2.1-rc.2",
     "@deepseek-ai/dsh-typert-protocol": "0.2.1-rc.2"
   },
@@ -106,6 +108,7 @@
     "@deepseek-ai/dsh-api-session-controller": "0.2.1-rc.2",
     "@deepseek-ai/dsh-llm": "0.2.1-rc.2",
     "@deepseek-ai/dsh-session": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-skill": "0.2.1-rc.2",
     "@deepseek-ai/dsh-tools": "0.2.1-rc.2",
     "@deepseek-ai/dsh-typert-protocol": "0.2.1-rc.2",
     "@types/node": "^22.18.0",
