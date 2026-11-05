@@ -4,6 +4,22 @@
   "description": "Supervised TypeScript/JavaScript programs for DeepSeek Harness",
   "type": "module",
   "license": "MIT",
+  "homepage": "https://github.com/tkellogg/dsh-program-agents#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tkellogg/dsh-program-agents.git"
+  },
+  "bugs": {
+    "url": "https://github.com/tkellogg/dsh-program-agents/issues"
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh-plugin",
+    "program-agents"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "engines": {
     "node": ">=22.18.0"
   },
@@ -39,6 +55,7 @@
       "default": "./dist/runtime/index.js"
     },
     "./client": "./dist/client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json"
   },
   "files": [
@@ -46,7 +63,11 @@
     "examples",
     "README.md",
     "LICENSE",
-    "docs",
+    "cordis.patch.yml",
+    "docs/installation.md",
+    "docs/log-format.md",
+    "docs/publishing.md",
+    "docs/supervision.md",
     "skills",
     "schemas"
   ],
@@ -55,8 +76,14 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "typecheck:references": "tsc --noEmit -p tsconfig.references.json",
     "test": "tsx --test tests/*.test.ts",
-    "check": "npm run build && npm run typecheck:references && npm test",
-    "example": "tsx examples/standalone-supervisor.ts"
+    "check": "pnpm build && pnpm typecheck:references && pnpm test",
+    "prepack": "pnpm check",
+    "example": "tsx examples/standalone-supervisor.ts",
+    "release:pack": "node scripts/release.mjs pack",
+    "release:inspect": "node scripts/release.mjs inspect",
+    "release:login": "pnpm login",
+    "release:publish:dry-run": "node scripts/release.mjs publish --dry-run --no-git-checks",
+    "release:publish": "node scripts/release.mjs publish"
   },
   "dependencies": {
     "@deepseek-ai/schemastery": "3.18.5",
@@ -93,6 +120,9 @@
     "typescript": "^5.9.0"
   },
   "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
     "client": {
       "platform": "web",
       "inject": [

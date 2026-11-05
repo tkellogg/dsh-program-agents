@@ -1,0 +1,5 @@
+# Installing this bundle enables the host plugin. DSH discovers the web client
+# through the dsh.client declaration in package.json.
+- insert:
+    - id: program-agents
+      name: '@tkellogg/dsh-program-agents'

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
-import { mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { test, type TestContext } from 'node:test';
+import { mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, watch, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -29,8 +29,37 @@ function temporary(t: { after(fn: () => void): void }): string {
   return path;
 }
 
+async function nativeWatchingAvailable(t: TestContext, directory: string): Promise<boolean> {
+  let watcher: ReturnType<typeof watch> | undefined;
+  let changeTimer: NodeJS.Timeout | undefined;
+  let timeout: NodeJS.Timeout | undefined;
+  const probe = join(directory, 'watch-probe');
+  writeFileSync(probe, 'probe');
+  try {
+    // Node --watch uses recursive directory watching on macOS and Windows.
+    // Probe that same facility: a file-only probe can succeed while it fails.
+    await new Promise<void>((resolve, reject) => {
+      watcher = watch(directory, { recursive: process.platform === 'darwin' || process.platform === 'win32' }, () => resolve());
+      watcher.once('error', reject);
+      changeTimer = setInterval(() => writeFileSync(probe, 'change'), 25);
+      timeout = setTimeout(() => reject(new Error('Native filesystem watcher did not report a change')), 2000);
+    });
+    return true;
+  } catch (error) {
+    if (!['EMFILE', 'ENOSPC', 'ENOSYS', 'ERR_FEATURE_UNAVAILABLE_ON_PLATFORM'].includes((error as NodeJS.ErrnoException).code ?? '')) throw error;
+    t.skip(`Native filesystem watching unavailable: ${(error as Error).message}`);
+    return false;
+  } finally {
+    clearInterval(changeTimer);
+    clearTimeout(timeout);
+    watcher?.close();
+    rmSync(probe, { force: true });
+  }
+}
+
 test('ordinary node --watch starts without SDK/IPC, exposes metadata/logs, and fences restart/stop groups', async (t) => {
   const logDirectory = temporary(t);
+  if (!await nativeWatchingAvailable(t, logDirectory)) return;
   process.env.RUNTIME_COMMAND_SECRET = 'must-not-inherit';
   const command = [process.execPath, '--watch', fixture('command-watch.mjs'), 'literal ; $(echo injected)'];
   const supervisor = new ProgramSupervisor({ programs: { watch: { command, name: 'Watched app', description: 'Ordinary watch process', env: { EXPLICIT: 'configured' }, urls: [
@@ -89,6 +118,7 @@ test('ordinary node --watch starts without SDK/IPC, exposes metadata/logs, and f
 
 test('node --watch reloads edited source without a new generation or parent notification', async (t) => {
   const directory = temporary(t);
+  if (!await nativeWatchingAvailable(t, directory)) return;
   const source = join(directory, 'watched.mjs');
   const render = (version: number) => `console.log(JSON.stringify({version:${version},workerPid:process.pid}));setInterval(()=>{},1000);\n`;
   writeFileSync(source, render(1));
@@ -101,7 +131,11 @@ test('node --watch reloads edited source without a new generation or parent noti
   });
   t.after(() => supervisor.dispose());
   const run = await supervisor.start({ program: 'app', ownerId: 'owner' });
-  const records = () => readFileSync(run.logsPath!, 'utf8').split('\n').filter((line) => line.startsWith('{"version":')).map((line) => JSON.parse(line) as { version: number; workerPid: number });
+  const records = () => {
+    const current = supervisor.get(run.id);
+    assert.equal(current.state, 'running', JSON.stringify(current));
+    return readFileSync(run.logsPath!, 'utf8').split('\n').filter((line) => line.startsWith('{"version":')).map((line) => JSON.parse(line) as { version: number; workerPid: number });
+  };
   const before = (await until(records, (items) => items.some((item) => item.version === 1))).find((item) => item.version === 1)!;
   writeFileSync(source, render(2));
   const after = (await until(records, (items) => items.some((item) => item.version === 2))).find((item) => item.version === 2)!;

@@ -373,8 +373,11 @@ export class ProgramSupervisor {
         const directory = this.options.bootstrapDirectory;
         const built = directory === undefined ? fileURLToPath(new URL('./bootstrap.js', import.meta.url)) : resolve(directory, 'bootstrap.js');
         const bootstrap = existsSync(built) ? built : directory === undefined ? fileURLToPath(new URL('./bootstrap.ts', import.meta.url)) : resolve(directory, 'bootstrap.ts');
-        // Source execution uses tsx only for .js specifiers in our TS sources.
-        const execArgv = bootstrap.endsWith('.ts') ? ['--import', import.meta.resolve('tsx')] : [];
+        // Source execution uses tsx for .js specifiers in our TS sources. Built
+        // execution needs native type stripping for TS entries; Node 23 before
+        // 23.6 requires the flag even though Node 22.18 enables it by default.
+        const execArgv = bootstrap.endsWith('.ts') ? ['--import', import.meta.resolve('tsx')]
+          : process.features.typescript ? [] : ['--experimental-strip-types'];
         child = fork(bootstrap, [run.definition.entry!, ...(run.definition.args ?? [])], { cwd: run.definition.cwd, env, execArgv, detached: true, stdio: ['ignore', 'pipe', 'pipe', 'ipc'], serialization: 'json' });
         run.queue = new SendQueue(child);
       }
